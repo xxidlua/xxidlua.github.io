@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" translate="no" class="notranslate">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XXIDLUA Exhibition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter+Tight:wght@400;500&family=Italiana&family=Pinyon+Script&family=Nanum+Myeongjo:wght@400;800&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/*
+VOICE: an old picture house before the show, then a quiet museum room.
+IDEA: opening night of a one-object exhibition, homage to Banksy's shredded auction.
+PICTURE: crushed wine velvet that really hangs and gathers, then the bronze specimen frame.
+COLOUR and TYPE: projector black #070605, velvet #4A0A1E, ivory #F8F6F0; Special Elite typewriter for the welcome, Inter Tight 500 for labels.
+LAYOUT: full-bleed stage; after the curtain, one centred object with four corner labels.
+*/
+:root{--bg:#F8F6F0;--ink:#111}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#070605;color:var(--ink)}
+body{font:500 15px/1.45 "Inter Tight",system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased;cursor:pointer}
+body.lit{cursor:auto}
+.stage{position:fixed;inset:0;overflow:hidden;background:var(--bg)}
+.hero{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1.04);transition:transform 3.4s cubic-bezier(.2,.7,.2,1)}
+.hero img{user-select:none;-webkit-user-drag:none}
+.hero .plate{display:block;width:100%;height:auto}
+.win{position:absolute;left:29.514%;top:25.778%;width:41.319%;height:51.611%;overflow:hidden}
+.win .card{position:absolute;left:14.79%;top:23.25%;width:70%;height:auto;filter:drop-shadow(5px 9px 9px rgba(45,25,18,.33)) drop-shadow(1px 2px 2px rgba(45,25,18,.25));will-change:transform}
+.shred{position:absolute;left:36.875%;width:26.389%;top:83.17%;height:59.78%;clip-path:inset(0 -80% -400% -80%);pointer-events:none}
+.shred::before{content:"";position:absolute;left:0;right:0;top:0;height:4%;z-index:2;background:linear-gradient(rgba(30,18,12,.38),rgba(30,18,12,0));opacity:var(--o,0)}
+.st{position:absolute;top:0;height:100%;background-repeat:no-repeat;transform-origin:50% 0;will-change:transform;transform:translateY(-101%);box-shadow:0 6px 10px rgba(40,25,15,.18)}
+.st::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.10),rgba(255,255,255,.05) 30%,rgba(0,0,0,0) 60%,rgba(0,0,0,.12));mix-blend-mode:multiply}
+.corner{transition:opacity 1s ease 1.6s,transform .9s cubic-bezier(.65,0,.25,1)}
+
+.open .hero{transform:translate(-50%,-50%) scale(1)}
+.corners{position:fixed;inset:0;z-index:25;pointer-events:none;color:#fff;mix-blend-mode:difference}.corner{position:absolute;z-index:2;letter-spacing:.01em;opacity:0;pointer-events:auto}
+.lit .corner{opacity:1}
+.tl{top:22px;left:25px}.tl p+p{margin-top:18px}
+.tr{top:20px;right:27px;display:flex;align-items:center;gap:16px}
+.bl{bottom:22px;left:25px}.br{bottom:22px;right:27px}
+.corner a{color:inherit;text-decoration:none}
+.corner a:hover,.corner a:focus-visible{text-decoration:underline;text-underline-offset:3px}
+.eyes{display:flex;gap:4px}.eyes svg{width:33px;height:19px;overflow:visible}
+.eyes ellipse{fill:none;stroke:currentColor;stroke-width:1.3}.eyes circle{fill:currentColor}
+#cloth{position:fixed;inset:0;width:100%;height:100%;z-index:10}
+#dark{position:fixed;inset:0;z-index:20;background:#070605;transition:opacity .05s linear;pointer-events:none}
+.type{position:fixed;inset:0;z-index:21;display:grid;place-items:center;pointer-events:none;transition:opacity .25s}
+.type p{font:400 clamp(22px,3.4vw,44px)/1.25 "Special Elite",monospace;color:#ece3cf;text-align:center;padding:0 8vw;text-shadow:0 0 14px rgba(255,236,200,.18),0 0 1px rgba(255,236,200,.6);animation:weave .5s steps(6) infinite}
+#caret{display:inline-block;width:.55em;height:.08em;background:#ece3cf;margin-left:.06em;vertical-align:-.05em}
+#caret.blink{animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@keyframes weave{0%{transform:translate(0,0)}20%{transform:translate(.4px,-.3px)}40%{transform:translate(-.3px,.4px)}60%{transform:translate(.2px,.2px)}80%{transform:translate(-.4px,-.2px)}}
+.hint{position:fixed;left:0;right:0;bottom:12vh;z-index:22;text-align:center;font:400 14px/1.4 "Special Elite",monospace;color:#b8ad98;letter-spacing:.04em;pointer-events:none;transition:opacity .6s}
+#gate{bottom:auto;top:50%;transform:translateY(-50%);font-size:15px}
+#gate small{display:block;margin-top:8px;font-size:12px;opacity:.6}
+.gone{opacity:0!important}
+#film{position:fixed;inset:0;width:100%;height:100%;z-index:30;pointer-events:none;image-rendering:auto}
+#flick{position:fixed;inset:0;z-index:31;background:#fff6dc;pointer-events:none;mix-blend-mode:soft-light}
+#vig{position:fixed;inset:0;z-index:29;pointer-events:none;background:radial-gradient(120% 90% at 50% 50%,transparent 55%,rgba(10,6,4,.55) 100%);transition:opacity 2s}
+.lit #vig{opacity:.35}
+.lit #film{opacity:.3}
+@media (max-width:600px){.tl{top:16px;left:16px}.tl p+p{margin-top:10px}.tr{top:14px;right:16px;gap:9px}.bl{bottom:18px;left:16px}.br{bottom:18px;right:16px}body{font-size:11.5px}.corner{letter-spacing:.03em}.eyes svg{width:24px;height:14px}}
+</style>
+<style>html.scroll{overflow-y:auto;overflow-x:hidden;height:auto}html.scroll,html.scroll body{background:var(--bg)}html.scroll body{overflow:visible;height:auto}html.scroll .stage{position:absolute;overflow:visible;height:100vh}html.scroll #cloth,html.scroll #dark{display:none}html.story .stage{position:fixed;height:100vh;will-change:transform}#story{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}html,body{transition:background-color .9s ease}
+/* ---- captions: museum wall labels; titles assemble from shredded slices ---- */
+.caps{position:fixed;inset:0;z-index:24;pointer-events:none;color:#151412;text-shadow:0 0 18px rgba(248,246,240,.9),0 0 4px rgba(248,246,240,.95);transition:color .9s ease,text-shadow .9s ease}.caps.dark{color:#f3eee3;text-shadow:0 0 16px rgba(0,0,0,.45),0 0 3px rgba(0,0,0,.5)}.tcar{box-shadow:0 0 6px rgba(248,246,240,.9)}
+.cap{position:absolute;visibility:hidden}
+.cap.on,.cap.out{visibility:visible}
+.cap.bl{left:25px;bottom:62px;max-width:min(46ch,42vw)}
+.cap.tc{left:50%;top:22px;transform:translateX(-50%);text-align:center;width:max-content;max-width:60vw}
+.disp{font:400 clamp(40px,5.4vw,88px)/1.02 "Italiana",serif;letter-spacing:.004em;margin:0 0 16px;white-space:nowrap}
+.disp.sm{font-size:clamp(26px,2.5vw,38px);margin-bottom:8px}
+.scr{font:400 clamp(48px,5.2vw,84px)/1.1 "Pinyon Script",cursive;margin:0 0 10px;padding-right:.3em;
+  -webkit-mask-image:linear-gradient(100deg,#000 42%,transparent 58%);mask-image:linear-gradient(100deg,#000 42%,transparent 58%);
+  -webkit-mask-size:260% 100%;mask-size:260% 100%;-webkit-mask-position:100% 0;mask-position:100% 0;transition:-webkit-mask-position .5s ease,mask-position .5s ease}
+.cap.on .scr{-webkit-mask-position:0 0;mask-position:0 0;transition:-webkit-mask-position 2.1s cubic-bezier(.45,.05,.3,1) .15s,mask-position 2.1s cubic-bezier(.45,.05,.3,1) .15s}
+.lbl{font:400 14px/1.55 "Inter Tight",system-ui,sans-serif;letter-spacing:.005em;margin:0}
+.lbl i{font-style:italic}
+.ln{display:block;overflow:hidden}
+.ln>span{display:block;transform:translateY(105%);transition:transform .45s cubic-bezier(.5,0,.75,0)}
+.cap.on .ln>span{transform:none;transition:transform .9s cubic-bezier(.16,1,.3,1)}
+.cap.on .ln:nth-child(1)>span{transition-delay:.45s}.cap.on .ln:nth-child(2)>span{transition-delay:.55s}.cap.on .ln:nth-child(3)>span{transition-delay:.65s}
+.shred-t{position:relative;display:inline-block}
+.shred-t .ghost{visibility:hidden}
+.shred-t .sl{position:absolute;left:0;top:0;white-space:nowrap;opacity:0;transform:translateY(calc(-55% - var(--r) * 25%));
+  transition:transform .55s cubic-bezier(.5,0,.75,0) calc(var(--i) * 18ms),opacity .4s linear calc(var(--i) * 18ms)}
+.cap.on .shred-t .sl{opacity:1;transform:none;transition:transform 1.05s cubic-bezier(.16,1,.3,1) calc(var(--i) * 42ms),opacity .35s linear calc(var(--i) * 42ms)}
+.cap.out .shred-t .sl{opacity:0;transform:translateY(calc(70% + var(--r) * 30%))}
+.cmyk .ck span{white-space:nowrap}.cmyk .ck{position:absolute;transform:translate(-50%,0);display:grid;grid-template-columns:auto auto;gap:1px 10px;font:500 10.5px/1.35 "Inter Tight",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:.02em;opacity:0;translate:0 8px;transition:opacity .4s,translate .4s}
+.cap.on .ck{opacity:.85;translate:0 0;transition:opacity .8s ease calc(.6s + var(--i) * 90ms),translate .9s cubic-bezier(.16,1,.3,1) calc(.6s + var(--i) * 90ms)}
+.cap.end{left:0;right:0;bottom:13vh;text-align:center}
+.tw{font:400 clamp(20px,2.4vw,32px)/1.2 "Special Elite",monospace;margin:0}
+.tcar{display:inline-block;width:.55em;height:.08em;background:currentColor;margin-left:.06em;vertical-align:-.05em;animation:blink 1s steps(1) infinite}
+@media (max-width:760px){
+  .cap.bl{left:22px;right:22px;bottom:60px;max-width:none;text-align:center}
+  .cap.bl .disp{white-space:normal}
+  .cap.tc{top:84px;max-width:calc(100vw - 44px)}
+  .disp{font-size:33px;line-height:1.04;margin-bottom:12px}.disp.sm{font-size:25px;margin-bottom:6px}.scr{font-size:48px;margin-bottom:6px;padding-right:0}
+  .lbl{font-size:12px;line-height:1.55;opacity:.78}.cmyk .ck{font-size:9px;gap:0 6px}
+}
+@media (prefers-reduced-motion:reduce){.shred-t .sl,.ln>span,.scr,.ck{transition:none!important}}
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+  <div class="hero" id="hero"><img class="plate" src="plate.jpg" alt="A bronze Art Nouveau specimen frame on an ivory wall">
+    <div class="win"><img class="card" id="card" src="card.jpg" alt="Business card by XXIDLUA pinned in the frame"></div>
+    <div class="shred" id="shred" aria-hidden="true"></div></div>
+</main>
+<div class="corners notranslate" id="corners" translate="no">
+  <nav class="corner tl" aria-label="Work"><p><a href="#graphic">GRAPHIC</a></p><p><a href="#typography">TYPOGRAPHY</a><br><a href="#ux-ui">UX UI DESIGN</a></p></nav>
+  <div class="corner tr"><span class="eyes" aria-hidden="true"><svg viewBox="-17 -10 34 20"><ellipse rx="16" ry="9"/><circle r="3.4" class="pupil"/></svg><svg viewBox="-17 -10 34 20"><ellipse rx="16" ry="9"/><circle r="3.4" class="pupil"/></svg></span><a href="#about">ABOUT ME</a></div>
+  <div class="corner bl">SPECIMEN 001</div><div class="corner br">2026</div>
+</div>
+<div class="caps notranslate" id="caps" translate="no">
+  <section class="cap bl" data-k="shred">
+    <h2 class="disp"><span class="shred-t">Shredded,</span><br><span class="shred-t">on purpose.</span></h2>
+    <p class="lbl"><span class="ln"><span>After Banksy, <i>Love is in the Bin</i>, 2018</span></span></p>
+  </section>
+  <section class="cap bl" data-k="leaflet">
+    <h2 class="disp"><span class="shred-t">Color Image</span></h2>
+    <p class="lbl"><span class="ln"><span>A bifold leaflet</span></span><span class="ln"><span>with a business card tucked inside</span></span></p>
+  </section>
+  <section class="cap bl" data-k="dreamer">
+    <h2 class="scr">Dreamer</h2>
+    <p class="lbl"><span class="ln"><span>Not one who chases illusions,</span></span><span class="ln"><span>but one who looks for the beauty in what is real.</span></span></p>
+  </section>
+  <section class="cap tc" data-k="roses">
+    <h2 class="disp sm"><span class="shred-t">Night, in five inks</span></h2>
+    <p class="lbl"><span class="ln"><span>Navy and lilac for the night sky, beige for the real.</span></span></p>
+  </section>
+  <div class="cap cmyk" data-k="roses" id="cmyk">
+    <div class="ck"><span>C 96</span><span>M 95</span><span>Y 38</span><span>K 51</span></div>
+    <div class="ck"><span>C 76</span><span>M 71</span><span>Y 24</span><span>K 0</span></div>
+    <div class="ck"><span>C 0</span><span>M 3</span><span>Y 17</span><span>K 0</span></div>
+    <div class="ck"><span>C 0</span><span>M 0</span><span>Y 0</span><span>K 20</span></div>
+    <div class="ck"><span>C 87</span><span>M 84</span><span>Y 83</span><span>K 73</span></div>
+  </div>
+  <section class="cap bl" data-k="exhibit">
+    <h2 class="disp"><span class="shred-t">A small</span><br><span class="shred-t">exhibition</span></h2>
+    <p class="lbl"><span class="ln"><span>The leaflet is the gallery.</span></span><span class="ln"><span>The card is the framed piece.</span></span></p>
+  </section>
+  <section class="cap bl" data-k="card">
+    <h2 class="disp"><span class="shred-t">XXIDLUA</span></h2>
+    <p class="lbl"><span class="ln"><span>Business card, 90 × 100 mm, folds to 90 × 50</span></span><span class="ln"><span>244 g white stock, scored and laser-cut</span></span></p>
+  </section>
+</div>
+<audio id="bgm" src="music.mp3" loop preload="auto"></audio>
+<canvas id="story" aria-hidden="true"></canvas>
+<canvas id="cloth" aria-hidden="true"></canvas>
+<div id="dark"></div>
+<div class="type"><p><span id="typed"></span><span id="caret" class="blink"></span></p></div>
+<div id="vig"></div><canvas id="film"></canvas><div id="flick"></div>
+
+<script src="sounds.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module" src="main.js"></script>
+<script type="module" src="story.js"></script>
+</body>
+</html>
