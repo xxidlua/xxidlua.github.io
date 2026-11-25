@@ -29,13 +29,17 @@ const T = {
   dissS: [6.2, 6.9], gatherR: [6.9, 7.9], holdR: [7.9, 9.0],
   scatR: [9.0, 9.5], gatherB: [9.5, 10.5], solidB: [10.5, 11.0], holdB: [11.0, 11.4],
   pull: [11.4, 12.5], leave: [12.05, 12.8], cardC: [12.4, 13.0], holdC: [13.0, 13.8],
-  fold: [13.8, 14.8], end: [14.8, 15.7]
+  fold: [13.8, 14.8], end: [14.8, 15.7],
+  flipB: [15.7, 16.4], unfold2: [16.4, 17.3], hold2: [17.3, 17.8], dive: [17.8, 19.3], cave: [19.3, 28.3]
 };
-const LEN = 15.7;
+const LEN = 29.2;
+const CAVE_N = 494;                                   // frames of the cave fly-through
+const fr2u = f => T.cave[0] + f / (CAVE_N - 1) * (T.cave[1] - T.cave[0]);
 
 /* ---------- sound cues (fired when the scroll crosses them, either way) ---------- */
 const CUES = [  // paper sounds only — the dots stay silent
-  [T.unfold[0] + .05, 'unfold', .7], [T.pull[0] + .15, 'slide', .8], [T.fold[0] + .08, 'fold', .85]
+  [T.unfold[0] + .05, 'unfold', .7], [T.pull[0] + .15, 'slide', .8], [T.fold[0] + .08, 'fold', .85],
+  [T.flipB[0] + .1, 'slide', .5], [T.unfold2[0] + .08, 'unfold', .6]
 ];
 const cueLast = {};
 function sfx(k, v) { const t = performance.now(); if (t - (cueLast[k] || 0) < 700) return; cueLast[k] = t; window.__play && window.__play(k, { vol: v }); }
@@ -639,7 +643,8 @@ function bloom(tm) {
 const CAPS = [
   ['shred', .06, .78], ['leaflet', T.holdF[0] + .02, T.top[0] - .02], ['dreamer', T.holdS[0] - .12, T.dissS[0] + .04],
   ['roses', T.gatherR[1] - .08, T.scatR[0] + .02], ['exhibit', T.holdB[0] - .06, T.pull[0] + .12],
-  ['card', T.holdC[0] - .06, T.fold[0] + .04]
+  ['card', T.holdC[0] - .06, T.fold[0] + .04],
+  ['name', fr2u(14), fr2u(128)], ['fields', fr2u(168), fr2u(292)], ['look', fr2u(330), fr2u(424)], ['contact', fr2u(452), 99]
 ];
 const capEls = {}, capOn = {}, capT = {};
 document.querySelectorAll('.cap').forEach(el => { (capEls[el.dataset.k] ||= []).push(el); });
@@ -680,6 +685,43 @@ function captions() {
   }
 }
 
+/* ---------- the cave: a scroll-scrubbed fly-through, first seen through the card's oval window ---------- */
+const caveCv = $('cave'), cctx = caveCv.getContext('2d');
+const CAVE = { set: null, imgs: [], next: 0, busy: 0 };
+const CAVE_BG = '#0b0a10';
+const OX = (.4924 - .5) * CW, OY = CC + .499 * CH / 2, RX = .3477 * CW, RY = .352 * CH / 2;   // the laser-cut oval, card-local
+function caveLoad() {
+  const set = innerWidth / innerHeight < 1 ? 'm' : 'd';
+  if (CAVE.set !== set) { CAVE.set = set; CAVE.imgs = new Array(CAVE_N); CAVE.next = 0; }
+  while (CAVE.busy < 6 && CAVE.next < CAVE_N) {
+    const i = CAVE.next++, im = new Image(); CAVE.busy++;
+    im.decoding = 'async';
+    im.onload = () => { CAVE.busy--; if (CAVE.set === set) CAVE.imgs[i] = im; caveLoad(); };
+    im.onerror = () => { CAVE.busy--; caveLoad(); };
+    im.src = `cave/${set}/${String(i + 1).padStart(4, '0')}.webp`;
+  }
+}
+function caveNear(i) { for (let k = i; k >= 0; k--) if (CAVE.imgs[k]) return k; for (let k = i + 1; k < CAVE_N; k++) if (CAVE.imgs[k]) return k; return -1; }
+/* f: fractional frame · z: zoom about the focal point (fx, fy in css px) · mx, my: parallax in css px */
+function drawCave(f, z, fx, fy, mx, my) {
+  const d = Math.min(devicePixelRatio, 1.5), W = Math.round(innerWidth * d), H = Math.round(innerHeight * d);
+  if (caveCv.width !== W || caveCv.height !== H) { caveCv.width = W; caveCv.height = H; }
+  const i0 = clamp(Math.floor(f), 0, CAVE_N - 1), a = caveNear(i0); if (a < 0) return;
+  const b = a === i0 && CAVE.imgs[i0 + 1] ? i0 + 1 : -1, t = b > 0 ? f - i0 : 0;
+  const im = CAVE.imgs[a], s1 = Math.max(W / im.width, H / im.height) * 1.05, w1 = im.width * s1, h1 = im.height * s1;
+  const Fx = fx * d, Fy = fy * d, x = Fx + (W / 2 - w1 / 2 + mx * d - Fx) * z, y = Fy + (H / 2 - h1 / 2 + my * d - Fy) * z;
+  cctx.globalAlpha = 1; cctx.drawImage(im, x, y, w1 * z, h1 * z);
+  if (t > .02) { cctx.globalAlpha = t; cctx.drawImage(CAVE.imgs[b], x, y, w1 * z, h1 * z); cctx.globalAlpha = 1; }
+}
+const ovalPts = Array.from({ length: 56 }, (_, i) => { const th = i / 56 * Math.PI * 2; return [Math.cos(th) * RX * 1.012, Math.sin(th) * RY * 1.012]; });
+const pv = new THREE.Vector3();
+function toScreen(v) { v.project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }
+function ovalClip(k) {   // k: how far the iris has opened inside the cut (0..1)
+  cardG.updateMatrixWorld(true);
+  return 'polygon(' + ovalPts.map(([x, y]) => { const [sx, sy] = toScreen(cc.localToWorld(pv.set(OX + x * k, OY + y * k, 0))); return `${sx.toFixed(1)}px ${sy.toFixed(1)}px`; }).join(',') + ')';
+}
+let caveMx = 0, caveMy = 0;
+
 /* ---------- frame ---------- */
 let clock = 0, last = performance.now(), LP = [0, Math.PI, 0, 1];
 const tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(), qF = new THREE.Quaternion(), eul = new THREE.Euler();
@@ -700,7 +742,7 @@ function loop(now) {
   yaw += (yt - yaw) * Math.min(1, dt * 5); pitch += (pt - pitch) * Math.min(1, dt * 5);
 
   // wall colour
-  const want = (u >= T.gatherR[0] && u < T.scatR[0] + .2 && roseBg) ? roseBg : IV;
+  const want = u >= lerp(T.dive[0], T.dive[1], .75) ? CAVE_BG : (u >= T.gatherR[0] && u < T.scatR[0] + .2 && roseBg) ? roseBg : IV;
   if (want !== curBg) {
     curBg = want; document.documentElement.style.background = want; document.body.style.background = want;
     const c = hexRGB(want); $('caps').classList.toggle('dark', c[0] * .299 + c[1] * .587 + c[2] * .114 < .55);
@@ -712,7 +754,7 @@ function loop(now) {
   /* ---- strips (until they have crumbled) ---- */
   const gB = inv(...T.burst, u);
   updateStrips(b, u < T.burst[0] + (T.burst[1] - T.burst[0]) * .56);
-  wall.visible = u >= T.burst[1] - .1;
+  wall.visible = u >= T.burst[1] - .1 && u < T.flipB[0] + .25;
 
   /* ---- particles + dissolve fronts ---- */
   let vis = true, op = 1, rep = .7, pop = 1;
@@ -795,16 +837,45 @@ function loop(now) {
     } else clip.set(new THREE.Vector3(0, 1, 0), 1e3);
     L.position.copy(keepP); L.rotation.copy(keepR); L.scale.setScalar(keepS); leafSheet.update(keepO); content.position.x = keepC; L.updateMatrixWorld(true);
     setOp(cardMats, back ? 1 : lo);
-    const bb = back ? eio(inv(...T.cardC, u)) : 0, f = eio(inv(...T.fold, u));
-    let wU = inv(T.holdC[0], T.holdC[0] + .25, u) * (1 - f);
-    if (u >= T.end[0]) wU = inv(T.end[0], T.end[0] + .3, u);
-    eul.set(pitch * wU, yaw * wU + Math.PI * f, 0); qF.setFromEuler(eul);
-    cardG.position.lerpVectors(tmpV, new THREE.Vector3(0, MY, .25), bb);
+    const bb = back ? eio(inv(...T.cardC, u)) : 0, f0 = eio(inv(...T.fold, u));
+    const fl = eio(inv(...T.flipB, u)), un = eio(inv(...T.unfold2, u)), f = f0 * (1 - un), dv = inv(...T.dive, u);
+    let wU = inv(T.holdC[0], T.holdC[0] + .25, u) * (1 - f0);
+    if (u >= T.end[0]) wU = inv(T.end[0], T.end[0] + .3, u) * (1 - inv(T.end[1] - .25, T.end[1], u));
+    if (u >= T.unfold2[1]) wU = .2 * inv(T.unfold2[1], T.hold2[1], u) * (1 - inv(T.dive[0], T.dive[0] + .3, u));
+    const arc = Math.sin(Math.PI * fl);   // the flip: lift, a little tilt, turn over
+    eul.set(pitch * wU + arc * .2, yaw * wU + Math.PI * f0 + Math.PI * fl, arc * .07); qF.setFromEuler(eul);
+    let sc = lerp(tmpS.x, sCard, bb);
+    const tgt = new THREE.Vector3(0, MY, .25 + arc * .35);
+    if (dv > 0) {   // fly into the oval: it grows until it swallows the screen, the cave behind it grows a little less
+      const visH = 2 * (CZ - .25) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), visW = visH * camera.aspect;
+      const need = Math.sqrt((visW / 2 / RX) ** 2 + (visH / 2 / RY) ** 2) * 1.06;
+      const e = sst(0, 1, dv), c = sst(0, .4, dv);
+      sc = sc * Math.exp(Math.log(need / sc) * e);
+      tgt.set(lerp(0, -sc * OX, c), lerp(MY, -sc * OY, c), .25);
+    }
+    cardG.position.lerpVectors(tmpV, tgt, bb);
     cardG.quaternion.slerpQuaternions(tmpQ, qF, bb);
-    cardG.scale.setScalar(lerp(tmpS.x, sCard, bb));
+    cardG.scale.setScalar(sc);
     cardSheet.update(Math.PI * f);
     cc.position.y = CH / 4 * f;
+    if (dv >= 1) cardG.visible = false;
   }
+
+  /* ---- cave ---- */
+  if (u > T.holdC[0] && CAVE.next < CAVE_N) caveLoad();
+  const caveOp = u >= T.unfold2[1] - .1 ? 1 : 0, iris = eo(inv(T.unfold2[1] - .1, T.hold2[0] + .3, u));
+  if (caveOp > 0) {
+    const dv = inv(...T.dive, u), e = sst(0, 1, dv);
+    const fr = u < T.cave[0] ? 0 : clamp((u - T.cave[0]) / (T.cave[1] - T.cave[0])) * (CAVE_N - 1);
+    const inCave = sst(T.dive[1] - .3, T.cave[0] + .3, u);
+    caveMx += (((COARSE ? 0 : (.5 - px)) * 22 * inCave) - caveMx) * Math.min(1, dt * 3);
+    caveMy += (((COARSE ? 0 : (.5 - py)) * 14 * inCave) - caveMy) * Math.min(1, dt * 3);
+    let fx = innerWidth / 2, fy = innerHeight / 2;
+    if (cardG.visible) { cardG.updateMatrixWorld(true); [fx, fy] = toScreen(cc.localToWorld(pv.set(OX, OY, 0))); }
+    drawCave(fr, lerp(.5, 1, e), lerp(fx, innerWidth / 2, e), lerp(fy, innerHeight / 2, e), caveMx, caveMy);
+    caveCv.style.clipPath = cardG.visible ? ovalClip(Math.max(.002, iris)) : 'none';
+    caveCv.style.opacity = caveOp;
+  } else if (caveCv.style.opacity !== '0') caveCv.style.opacity = 0;
 
   renderer.render(scene, camera);
 }
