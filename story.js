@@ -719,8 +719,71 @@ function caveDecode(c) {  // keep only a small window of decoded frames around t
       .catch(() => { CAVE.bmp[k] = null; }).finally(() => { CAVE.dec--; });
   }
 }
-let caveDirty = true;
+let caveDirty = true, caveAmb = 0;
 function caveNear(i) { for (let d = 0; d < 40; d++) { if (CAVE.bmp[i - d]) return i - d; if (CAVE.bmp[i + d]) return i + d; } return -1; }
+/* ---------- life inside the footage: twinkling glowworms, drifting fog, swaying flowers, a few moths of light ---------- */
+let LIGHTS = null; fetch('cave/lights.json').then(r => r.json()).then(j => { LIGHTS = j; }).catch(() => {});
+const GLOW = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(235,242,255,1)'); r.addColorStop(.18, 'rgba(170,195,255,.75)'); r.addColorStop(.5, 'rgba(140,150,255,.18)'); r.addColorStop(1, 'rgba(120,120,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return c; })();
+const FOGTEX = (() => {   // a horizontally tileable band of soft mist, denser toward the bottom
+  const W = 1024, H = 384, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  let sd = 91; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 260; i++) {
+    const y = H * (.25 + Math.pow(rnd(), .6) * .75), r = 40 + rnd() * 120, a = .05 + rnd() * .08, x = rnd() * W;
+    for (const ox of [-W, 0, W]) { const gr = g.createRadialGradient(x + ox, y, 0, x + ox, y, r); gr.addColorStop(0, `rgba(205,196,235,${a})`); gr.addColorStop(1, 'rgba(205,196,235,0)'); g.fillStyle = gr; g.fillRect(x + ox - r, y - r, r * 2, r * 2); }
+  }
+  return c;
+})();
+const MOTHS = Array.from({ length: COARSE ? 3 : 6 }, (_, i) => { let sd = 31 + i * 977; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  return { cx: .18 + r() * .64, cy: .25 + r() * .45, ax: .08 + r() * .14, ay: .05 + r() * .1, fa: .11 + r() * .12, fb: .17 + r() * .14, p: r() * 6.28, q: r() * 6.28, flap: 7 + r() * 5, s: .6 + r() * .7, from: r() * .5 }; });
+function moth(ctx, x, y, s, flap, ang, a) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.globalAlpha = a * .55; ctx.drawImage(GLOW, -s * 3, -s * 3, s * 6, s * 6);
+  ctx.globalAlpha = a; ctx.fillStyle = 'rgba(232,226,255,.92)';
+  for (const sgn of [-1, 1]) {
+    ctx.save(); ctx.scale(sgn * (.25 + .75 * Math.abs(flap)), 1);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(s * .9, -s * 1.3, s * 1.9, -s * .5, s * 1.1, s * .15); ctx.bezierCurveTo(s * 1.5, s * .7, s * .7, s * 1.1, 0, s * .2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawLife(fi, im, x, y, w, h, d, amb) {
+  if (amb <= 0) return;
+  const t = clock, W = caveCv.width, H = caveCv.height, set = CAVE.set;
+  const map = (nx, ny) => set === 'm' ? [x + ((nx * 2560 - 875) / 810) * w, y + ny * h] : [x + nx * w, y + ny * h];
+  // flowers on the moss rim sway (exit stretch of the flight): re-draw the lower-left of the frame in thin, offset slices
+  const fl = amb * sst(250, 290, fi) * (1 - sst(420, 450, fi));
+  if (fl > .02 && set !== 'm') {
+    const sx0 = 0, sx1 = im.width * .34, sy0 = im.height * .5, sy1 = im.height, step = Math.max(3, Math.round(im.height / 260));
+    for (let sy = sy0; sy < sy1; sy += step) {
+      const k = 1 - (sy - sy0) / (sy1 - sy0), off = (Math.sin(t * 1.15 + sy * .021) * .7 + Math.sin(t * .63 + sy * .011) * .5) * 4.5 * d * k * fl;
+      cctx.drawImage(im, sx0, sy, sx1 - sx0, step, x + off, y + sy / im.height * h, (sx1 - sx0) / im.width * w, step / im.height * h + .6);
+    }
+  }
+  cctx.globalCompositeOperation = 'lighter';
+  // mist: two layers sliding past each other along the bottom
+  const fogA = amb * (.55 + .45 * sst(250, 330, fi));
+  for (const [sp, al, yy, sc] of [[14, .16, .58, 1.2], [-9, .11, .66, 1.6]]) {
+    const tw = W * sc, th = tw * FOGTEX.height / FOGTEX.width, ox = ((t * sp * d) % tw + tw) % tw;
+    cctx.globalAlpha = al * fogA;
+    for (let k = -1; k < 2; k++) cctx.drawImage(FOGTEX, k * tw + ox - tw * .2, H * yy - th * .25, tw, th);
+  }
+  // glowworms: the lights in the footage pulse on their own rhythm
+  const L = LIGHTS && LIGHTS[Math.min(LIGHTS.length - 1, Math.round(fi))];
+  if (L) for (let i = 0; i < L.length; i += 3) {
+    const [px, py] = map(L[i], L[i + 1]), r = L[i + 2] * w, sd = L[i] * 91 + L[i + 1] * 57;
+    const tw = .5 + .5 * Math.sin(t * (1.6 + (sd % 1.7)) + sd * 13);
+    cctx.globalAlpha = amb * (.1 + .45 * tw * tw); const R = r * (2.4 + tw * 1.8) + 3 * d;
+    cctx.drawImage(GLOW, px - R, py - R, R * 2, R * 2);
+  }
+  // moths of light
+  const ma = amb * sst(40, 90, fi);
+  if (ma > .02) for (const m of MOTHS) {
+    const tt = t + m.p * 10, nx = m.cx + Math.sin(tt * m.fa + m.p) * m.ax + Math.sin(tt * m.fa * 2.3) * .02, ny = m.cy + Math.sin(tt * m.fb + m.q) * m.ay;
+    const vx = Math.cos(tt * m.fa + m.p) * m.ax * m.fa, vy = Math.cos(tt * m.fb + m.q) * m.ay * m.fb;
+    moth(cctx, nx * W, ny * H, 7 * m.s * d, Math.sin(tt * m.flap), Math.atan2(vy, vx) * .25, ma * (.6 + .4 * Math.sin(tt * .7)));
+  }
+  cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over';
+}
 /* f: fractional frame · z: zoom about the focal point (fx, fy in css px) · mx, my: parallax in css px */
 function drawCave(f, z, fx, fy, mx, my) {
   const d = Math.min(devicePixelRatio, CAVE.set === 'hd' ? 2 : 1.5), W = Math.round(innerWidth * d), H = Math.round(innerHeight * d);
@@ -731,6 +794,7 @@ function drawCave(f, z, fx, fy, mx, my) {
   const Fx = fx * d, Fy = fy * d, x = Fx + (W / 2 - w1 / 2 + mx * d - Fx) * z, y = Fy + (H / 2 - h1 / 2 + my * d - Fy) * z;
   cctx.globalAlpha = 1; cctx.drawImage(im, x, y, w1 * z, h1 * z);
   if (t > .02) { cctx.globalAlpha = t; cctx.drawImage(CAVE.bmp[b], x, y, w1 * z, h1 * z); cctx.globalAlpha = 1; }
+  drawLife(f, im, x, y, w1 * z, h1 * z, d, caveAmb);
 }
 const ovalPts = Array.from({ length: 56 }, (_, i) => { const th = i / 56 * Math.PI * 2; return [Math.cos(th) * RX * 1.012, Math.sin(th) * RY * 1.012]; });
 const pv = new THREE.Vector3();
@@ -965,7 +1029,8 @@ function loop(now) {
     let fx = innerWidth / 2, fy = innerHeight / 2;
     if (cardG.visible) { cardG.updateMatrixWorld(true); [fx, fy] = toScreen(cc.localToWorld(pv.set(OX, OY, 0))); }
     const zk = lerp(.5, 1, e), ck = [fr.toFixed(2), zk.toFixed(4), fx | 0, fy | 0, caveMx.toFixed(1), caveMy.toFixed(1), innerWidth, innerHeight].join();
-    if (ck !== lastCave || caveDirty) { lastCave = ck; caveDirty = false; drawCave(fr, zk, lerp(fx, innerWidth / 2, e), lerp(fy, innerHeight / 2, e), caveMx, caveMy); }
+    caveAmb = sst(T.dive[0] + .4, T.cave[0] + .3, u);
+    if (ck !== lastCave || caveDirty || caveAmb > 0) { lastCave = ck; caveDirty = false; drawCave(fr, zk, lerp(fx, innerWidth / 2, e), lerp(fy, innerHeight / 2, e), caveMx, caveMy); }
     else caveDecode(clamp(Math.floor(fr), 0, CAVE_N - 1));
     const clipS = cardG.visible ? ovalClip(Math.max(.002, iris)) : 'none';
     if (clipS !== lastClip) { lastClip = clipS; caveCv.style.clipPath = clipS; }
