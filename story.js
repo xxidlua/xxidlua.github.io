@@ -823,7 +823,7 @@ function samplePts(g) {
   const lines = h.innerHTML.split(/<br\s*\/?>/i).map(t => t.replace(/<[^>]+>/g, '').trim());
   const fs = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight) || fs * 1.05;
   const c = document.createElement('canvas'), W = Math.ceil(innerWidth), H = Math.ceil(innerHeight); c.width = W; c.height = H;
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `400 ${fs}px Makcasa, serif`;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
   const top = r.top + (r.height - lh * lines.length) / 2;
   lines.forEach((t, i) => x.fillText(t, r.left + r.width / 2, top + lh * (i + .5)));
   const d = x.getImageData(0, 0, W, H).data, cand = [], st = Math.max(2, Math.round(fs / 26));
@@ -853,7 +853,7 @@ function space() {
     // the type itself: surfaces out of the gathered fog, blurs away again
     const ty = sst(.3, .5, q) * (g.stay ? 1 : 1 - sst(.64, .8, q)), bl = (1 - ty) * 16;
     const lv = ty.toFixed(3); if (lv !== g.last) { g.last = lv; g.el.style.opacity = ty; g.el.style.filter = !COARSE && bl > .6 ? `blur(${Math.min(10, bl).toFixed(1)}px)` : ''; }
-    if (!g.pts && document.fonts.check('40px Makcasa')) g.pts = samplePts(g);
+    if (!g.pts && document.fonts.check(`40px ${getComputedStyle(g.el.querySelector('.mk')).fontFamily}`)) g.pts = samplePts(g);
     if (!g.pts) continue;
     const fadeIn = sst(0, .14, q), out = g.stay ? 0 : inv(.62, 1, q);
     for (const pt of g.pts) {
