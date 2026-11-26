@@ -88,24 +88,24 @@ function show(fi){if(!cfr.length||!meshes.length)return;fi=Math.max(0,Math.min(c
       rp[o2+3]=(arr[s]+lp[s])/2+ox*THK*.55;rp[o2+4]=(arr[s+1]+lp[s+1])/2+oy*THK*.55;rp[o2+5]=(arr[s+2]+lp[s+2])/2+oz*THK*.55;
       rp[o2+6]=lp[s];rp[o2+7]=lp[s+1];rp[o2+8]=lp[s+2];o2+=9}});
     U.rgeo.attributes.position.needsUpdate=true;U.rgeo.computeVertexNormals()})}
-function bake(){if(worker)worker.terminate();cfr=[];baked=false;shown=-1;const id=++bakeId;
+let bakedAsp=0;function bake(){if(worker)worker.terminate();cfr=[];baked=false;shown=-1;const id=++bakeId;
   worker=new Worker(URL.createObjectURL(new Blob([WSRC],{type:'text/javascript'})));
   worker.onmessage=e=>{const d=e.data;if(d.id!==bakeId)return;
     if(d.type==='meta'){meta=d;makeMeshes()}else if(d.type==='frames'){for(const f of d.frames)cfr.push(f);if(shown<0)show(0)}else if(d.type==='done')baked=true};
-  worker.postMessage({asp:innerWidth/innerHeight,small:innerWidth<700,id})}
+  bakedAsp=innerWidth/innerHeight;worker.postMessage({asp:bakedAsp,small:innerWidth<700,id})}
 function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
 resize();bake();
-let rzT=0;addEventListener('resize',()=>{resize();if(!opening){clearTimeout(rzT);rzT=setTimeout(bake,250)}});
+let rzT=0;addEventListener('resize',()=>{resize();if(!opening&&Math.abs(innerWidth/innerHeight-bakedAsp)/bakedAsp>.18){clearTimeout(rzT);rzT=setTimeout(bake,400)}});
 
 const L={spot:0,house:0,foot:0,amb:0};
 function applyLights(){spot.intensity=L.spot*11;house.intensity=L.house*3.2;foot.intensity=L.foot*.55;amb.intensity=L.amb*.35}
-let opening=false,openT0=0,done=false,last=performance.now();
+let lastRK='',opening=false,openT0=0,done=false,last=performance.now();
 function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;
   if(phase==='gate'||phase==='typing'||phase==='await-lights'){requestAnimationFrame(frame);return}
   if(opening){let fi=(now-openT0)/1000*30;
     if(fi>cfr.length-1){if(baked){if(!done){done=true;show(cfr.length-1);renderer.render(scene,camera);cv.style.display='none';phase='main';setTimeout(()=>{try{renderer.dispose();renderer.forceContextLoss()}catch(e){}},400)}return}openT0+=dt*1000;fi=cfr.length-1}
     show(fi)}else show(0);
-  applyLights();renderer.render(scene,camera);requestAnimationFrame(frame)}
+  applyLights();const rk=shown+'|'+L.spot+'|'+L.house+'|'+L.foot+'|'+L.amb+'|'+innerWidth+'x'+innerHeight;if(rk!==lastRK){lastRK=rk;renderer.render(scene,camera)}requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
 
 /* ---------- sequence ---------- */
@@ -121,7 +121,7 @@ function lightsOn(){phase='lights';play('spot',{vol:.9});
   setTimeout(()=>fade(proj,.08,2),800);setTimeout(()=>{phase='await-open'},800)}
 let bgm=null;function startMusic(){const a=$('#bgm');if(!a)return;try{if(AC){if(!bgm){const s=AC.createMediaElementSource(a),g=AC.createGain();g.gain.value=0;s.connect(g).connect(AC.destination);bgm={g}}
   a.play().catch(()=>{});const g=bgm.g.gain;g.cancelScheduledValues(AC.currentTime);g.setValueAtTime(0,AC.currentTime);g.linearRampToValueAtTime(.32,AC.currentTime+7)}else{a.volume=.3;a.play().catch(()=>{})}}catch(e){}}
-function openCurtain(){if(!baked){setTimeout(openCurtain,150);return}phase='open';startMusic();stage.classList.add('open');opening=true;openT0=performance.now();play('curtain',{vol:.85});
+function openCurtain(){if(cfr.length<2){setTimeout(openCurtain,80);return}phase='open';startMusic();stage.classList.add('open');opening=true;openT0=performance.now();play('curtain',{vol:.85});
   const t0=performance.now();(function hl(){const t=(performance.now()-t0)/1000;L.house=Math.min(1,.25+t*.6);L.foot=Math.min(1,t*.6);L.spot=Math.max(.0,1-t*.3);L.amb=.5+Math.min(.5,t*.3);if(t<2.6)requestAnimationFrame(hl)})();
   setTimeout(()=>{document.body.classList.add('lit');fade(proj,0,3)},1600)}
 function onAct(){if(phase==='main')return;if(phase==='gate')enter();else if(phase==='await-lights')lightsOn();else if(phase==='await-open')openCurtain()}
