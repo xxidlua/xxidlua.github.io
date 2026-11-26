@@ -72,9 +72,10 @@ function updateStage(sy) {
   const sw = .26389 * b.w, sh = 1076 * b.k;
   const cx = b.left + .36875 * b.w + sw / 2, cy = b.top + .8317 * b.h + sh / 2 - E;
   const z = eio(inv(T.zoom[0], T.zoom[1], u));
-  ST.Z = lerp(1, Math.min(.9 * innerHeight / sh, .8 * innerWidth / sw, 3.2), z);
+  const mob = innerWidth / innerHeight < .8;   // phones: keep the strips in the upper part, clear of the caption
+  ST.Z = lerp(1, Math.min((mob ? .6 : .9) * innerHeight / sh, .8 * innerWidth / sw, 3.2), z);
   ST.ox = cx; ST.oy = cy + E;
-  ST.tx = lerp(0, innerWidth / 2 - cx, z); ST.ty = -Math.min(sy, E) + lerp(0, innerHeight / 2 - cy, z);
+  ST.tx = lerp(0, innerWidth / 2 - cx, z); ST.ty = -Math.min(sy, E) + lerp(0, innerHeight * (mob ? .4 : .5) - cy, z);
   stage.style.transformOrigin = `${ST.ox}px ${ST.oy}px`;
   stage.style.transform = `translate3d(${ST.tx}px,${ST.ty}px,0) scale(${ST.Z})`;
   const bo = inv(T.burst[0] + .05, T.burst[0] + .3, u);
@@ -203,10 +204,10 @@ function sizes() {
 
 function init3D() {
   const cv = $('story');
-  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: !COARSE, alpha: true, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, powerPreference: 'high-performance' });
   cv.addEventListener('webglcontextlost', e => e.preventDefault());
   cv.addEventListener('webglcontextrestored', () => location.reload());
-  renderer.setPixelRatio(DPR = Math.min(devicePixelRatio, COARSE ? 1.25 : 1.5));
+  renderer.setPixelRatio(DPR = Math.min(devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.VSMShadowMap;
   renderer.localClippingEnabled = true;
@@ -956,7 +957,7 @@ function loop(now) {
   if (animated || key !== last3D) { last3D = key; renderer.render(scene, camera); }
   // adaptive resolution: if frames are slow, render the 3D a bit softer
   perfT += dt; perfN++;
-  if (perfN >= 90) { const ms = perfT / perfN * 1000; perfT = perfN = 0; if (ms > 24 && DPR > 1) { DPR = Math.max(1, DPR - .25); renderer.setPixelRatio(DPR); sizes(); last3D = ''; } }
+  if (perfN >= 90) { const ms = perfT / perfN * 1000; perfT = perfN = 0; if (ms > 24 && DPR > (COARSE ? 1.5 : 1)) { DPR = Math.max(COARSE ? 1.5 : 1, DPR - .25); renderer.setPixelRatio(DPR); sizes(); last3D = ''; } }
 }
 
 /* test hook: jump to a story position (in viewport heights after the strips) */
