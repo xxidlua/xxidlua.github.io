@@ -820,7 +820,7 @@ function fogSize() {
 /* sample the letter shapes of a block's headline where it sits on screen */
 function samplePts(g) {
   const h = g.el.querySelector('.mk'), cs = getComputedStyle(h), r = h.getBoundingClientRect();
-  const lines = h.innerHTML.split(/<br\s*\/?>/i).map(t => t.replace(/<[^>]+>/g, '').trim());
+  const lines = h.innerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '').split(/<br\s*\/?>/i).map(t => t.replace(/<[^>]+>/g, '').trim());
   const fs = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight) || fs * 1.05;
   const c = document.createElement('canvas'), W = Math.ceil(innerWidth), H = Math.ceil(innerHeight); c.width = W; c.height = H;
   const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
