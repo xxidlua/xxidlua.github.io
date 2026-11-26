@@ -823,9 +823,11 @@ function samplePts(g) {
   const lines = h.innerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '').split(/<br\s*\/?>/i).map(t => t.replace(/<[^>]+>/g, '').trim());
   const fs = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight) || fs * 1.05;
   const c = document.createElement('canvas'), W = Math.ceil(innerWidth), H = Math.ceil(innerHeight); c.width = W; c.height = H;
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'alphabetic'; x.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
+  // place each line on the same baseline the browser uses (half-leading model), so the fog lands on the real letters
+  const fm = x.measureText(lines[0] || 'x'), fA = fm.fontBoundingBoxAscent ?? fs * .8, fD = fm.fontBoundingBoxDescent ?? fs * .2;
   const top = r.top + (r.height - lh * lines.length) / 2;
-  lines.forEach((t, i) => x.fillText(t, r.left + r.width / 2, top + lh * (i + .5)));
+  lines.forEach((t, i) => x.fillText(t, r.left + r.width / 2, top + lh * i + (lh - (fA + fD)) / 2 + fA));
   const d = x.getImageData(0, 0, W, H).data, cand = [], st = Math.max(2, Math.round(fs / 26));
   for (let yy = 0; yy < H; yy += st) for (let xx = 0; xx < W; xx += st) if (d[(yy * W + xx) * 4 + 3] > 140) cand.push(xx, yy);
   const n = Math.min(cand.length / 2, COARSE ? 260 : 560), out = [];
