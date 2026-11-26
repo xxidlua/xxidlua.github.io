@@ -103,7 +103,7 @@ let opening=false,openT0=0,done=false,last=performance.now();
 function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;
   if(phase==='gate'||phase==='typing'||phase==='await-lights'){requestAnimationFrame(frame);return}
   if(opening){let fi=(now-openT0)/1000*30;
-    if(fi>cfr.length-1){if(baked){if(!done){done=true;show(cfr.length-1);renderer.render(scene,camera);cv.style.display='none';phase='main'}return}openT0+=dt*1000;fi=cfr.length-1}
+    if(fi>cfr.length-1){if(baked){if(!done){done=true;show(cfr.length-1);renderer.render(scene,camera);cv.style.display='none';phase='main';setTimeout(()=>{try{renderer.dispose();renderer.forceContextLoss()}catch(e){}},400)}return}openT0+=dt*1000;fi=cfr.length-1}
     show(fi)}else show(0);
   applyLights();renderer.render(scene,camera);requestAnimationFrame(frame)}
 requestAnimationFrame(frame);

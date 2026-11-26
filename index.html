@@ -170,7 +170,7 @@ body.lit{cursor:auto}
     <p class="lbl"><span class="ln"><span>Business card, 90 × 100 mm, folds to 90 × 50</span></span><span class="ln"><span>244 g white stock, scored and laser-cut</span></span></p>
   </section>
 </div>
-<audio id="bgm" src="music.mp3" loop preload="auto"></audio>
+<audio id="bgm" src="music.mp3" loop preload="none"></audio>
 <canvas id="cave" aria-hidden="true"></canvas>
 <canvas id="story" aria-hidden="true"></canvas>
 <canvas id="cloth" aria-hidden="true"></canvas>
@@ -178,7 +178,7 @@ body.lit{cursor:auto}
 <div class="type"><p><span id="typed"></span><span id="caret" class="blink"></span></p></div>
 <div id="vig"></div><canvas id="film"></canvas><div id="flick"></div>
 
-<script src="sounds.js"></script>
+<script src="sounds.js" defer></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
 <script type="module" src="main.js"></script>
 <script type="module" src="story.js"></script>

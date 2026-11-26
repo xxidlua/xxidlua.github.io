@@ -182,9 +182,9 @@ function paperNormal(size, fibres, grain, felt, seed) {
 }
 
 /* ---------- 3D ---------- */
-let MY = 0, renderer, scene, camera, CZ = 9, vh = 1, vw = 1, sLeaf = 1, sTop = 1, sSpread = 1, sCard = 1, wall, swall;
+let DPR = 1.5, MY = 0, renderer, scene, camera, CZ = 9, vh = 1, vw = 1, sLeaf = 1, sTop = 1, sSpread = 1, sCard = 1, wall, swall;
 let L, content, base, flap, anchor, cardG, cc, leafSheet, cardSheet, leafMats = [], cardMats = [], clip;
-let pts, pGeo, pMat, N = COARSE ? 9000 : 18000, ok3D = false, nLeaf, nCard;
+let pts, pGeo, pMat, N = COARSE ? 7000 : 13000, ok3D = false, nLeaf, nCard;
 const strips = []; let stripMatF, stripMatB, stripPix;
 const NS = 16, SEG = 40;
 
@@ -203,8 +203,10 @@ function sizes() {
 
 function init3D() {
   const cv = $('story');
-  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, COARSE ? 1.6 : 2));
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: !COARSE, alpha: true, powerPreference: 'high-performance' });
+  cv.addEventListener('webglcontextlost', e => e.preventDefault());
+  cv.addEventListener('webglcontextrestored', () => location.reload());
+  renderer.setPixelRatio(DPR = Math.min(devicePixelRatio, COARSE ? 1.25 : 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.VSMShadowMap;
   renderer.localClippingEnabled = true;
@@ -215,9 +217,9 @@ function init3D() {
 
   scene.add(new THREE.AmbientLight(0xffffff, .5));
   const key = new THREE.DirectionalLight(0xfff3e4, 2.1); key.position.set(-2.6, 3.2, 6);
-  key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+  key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
   Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: .5, far: 20 });
-  key.shadow.radius = 7; key.shadow.blurSamples = 16; key.shadow.bias = -.0004; key.shadow.normalBias = .004;
+  key.shadow.radius = 7; key.shadow.blurSamples = 8; key.shadow.bias = -.0004; key.shadow.normalBias = .004;
   scene.add(key);
   const fill = new THREE.DirectionalLight(0xe9ecff, .75); fill.position.set(2.5, -1, -5); scene.add(fill);
   wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ opacity: .15 }));
@@ -687,31 +689,45 @@ function captions() {
 
 /* ---------- the cave: a scroll-scrubbed fly-through, first seen through the card's oval window ---------- */
 const caveCv = $('cave'), cctx = caveCv.getContext('2d');
-const CAVE = { set: null, imgs: [], next: 0, busy: 0 };
 const CAVE_BG = '#0b0a10';
 const OX = (.4924 - .5) * CW, OY = CC + .499 * CH / 2, RX = .3477 * CW, RY = .352 * CH / 2;   // the laser-cut oval, card-local
-function caveLoad() {
+const CAVE = { set: null, blobs: [], req: [], bmp: [], live: new Set(), dec: 0, busy: 0, cur: 0 };
+function caveLoad() {   // compressed frames, fetched at low priority, nearest-ahead first
   const set = innerWidth / innerHeight < 1 ? 'm' : 'd';
-  if (CAVE.set !== set) { CAVE.set = set; CAVE.imgs = new Array(CAVE_N); CAVE.next = 0; }
-  while (CAVE.busy < 6 && CAVE.next < CAVE_N) {
-    const i = CAVE.next++, im = new Image(); CAVE.busy++;
-    im.decoding = 'async';
-    im.onload = () => { CAVE.busy--; if (CAVE.set === set) CAVE.imgs[i] = im; caveLoad(); };
-    im.onerror = () => { CAVE.busy--; caveLoad(); };
-    im.src = `cave/${set}/${String(i + 1).padStart(4, '0')}.webp`;
+  if (CAVE.set !== set) { for (const k of CAVE.live) CAVE.bmp[k].close(); CAVE.live.clear(); Object.assign(CAVE, { set, blobs: [], req: [], bmp: [] }); }
+  while (CAVE.busy < 4) {
+    let i = -1;
+    for (let k = Math.max(0, CAVE.cur - 2); k < CAVE_N; k++) if (!CAVE.req[k]) { i = k; break; }
+    if (i < 0) for (let k = 0; k < CAVE_N; k++) if (!CAVE.req[k]) { i = k; break; }
+    if (i < 0) return;
+    CAVE.req[i] = 1; CAVE.busy++;
+    fetch(`cave/${set}/${String(i + 1).padStart(4, '0')}.webp`, { priority: 'low' }).then(r => r.blob())
+      .then(b => { if (CAVE.set === set) CAVE.blobs[i] = b; }).catch(() => { CAVE.req[i] = 0; })
+      .finally(() => { CAVE.busy--; caveLoad(); });
   }
 }
-function caveNear(i) { for (let k = i; k >= 0; k--) if (CAVE.imgs[k]) return k; for (let k = i + 1; k < CAVE_N; k++) if (CAVE.imgs[k]) return k; return -1; }
+function caveDecode(c) {  // keep only a small window of decoded frames around the playhead (decoded off the main thread)
+  CAVE.cur = c;
+  for (const k of CAVE.live) if (k < c - 12 || k > c + 26) { CAVE.bmp[k].close(); CAVE.bmp[k] = null; CAVE.live.delete(k); }
+  for (let k = Math.max(0, c - 3); k <= Math.min(CAVE_N - 1, c + 16) && CAVE.dec < 3; k++) {
+    if (CAVE.bmp[k] || CAVE.bmp[k] === 0 || !CAVE.blobs[k]) continue;
+    CAVE.bmp[k] = 0; CAVE.dec++; const set = CAVE.set;
+    createImageBitmap(CAVE.blobs[k]).then(bm => { if (CAVE.set !== set) { bm.close(); return; } CAVE.bmp[k] = bm; CAVE.live.add(k); caveDirty = true; })
+      .catch(() => { CAVE.bmp[k] = null; }).finally(() => { CAVE.dec--; });
+  }
+}
+let caveDirty = true;
+function caveNear(i) { for (let d = 0; d < 40; d++) { if (CAVE.bmp[i - d]) return i - d; if (CAVE.bmp[i + d]) return i + d; } return -1; }
 /* f: fractional frame · z: zoom about the focal point (fx, fy in css px) · mx, my: parallax in css px */
 function drawCave(f, z, fx, fy, mx, my) {
   const d = Math.min(devicePixelRatio, 1.5), W = Math.round(innerWidth * d), H = Math.round(innerHeight * d);
   if (caveCv.width !== W || caveCv.height !== H) { caveCv.width = W; caveCv.height = H; }
-  const i0 = clamp(Math.floor(f), 0, CAVE_N - 1), a = caveNear(i0); if (a < 0) return;
-  const b = a === i0 && CAVE.imgs[i0 + 1] ? i0 + 1 : -1, t = b > 0 ? f - i0 : 0;
-  const im = CAVE.imgs[a], s1 = Math.max(W / im.width, H / im.height) * 1.05, w1 = im.width * s1, h1 = im.height * s1;
+  const i0 = clamp(Math.floor(f), 0, CAVE_N - 1); caveDecode(i0); const a = caveNear(i0); if (a < 0) return;
+  const b = a === i0 && CAVE.bmp[i0 + 1] ? i0 + 1 : -1, t = b > 0 ? f - i0 : 0;
+  const im = CAVE.bmp[a], s1 = Math.max(W / im.width, H / im.height) * 1.05, w1 = im.width * s1, h1 = im.height * s1;
   const Fx = fx * d, Fy = fy * d, x = Fx + (W / 2 - w1 / 2 + mx * d - Fx) * z, y = Fy + (H / 2 - h1 / 2 + my * d - Fy) * z;
   cctx.globalAlpha = 1; cctx.drawImage(im, x, y, w1 * z, h1 * z);
-  if (t > .02) { cctx.globalAlpha = t; cctx.drawImage(CAVE.imgs[b], x, y, w1 * z, h1 * z); cctx.globalAlpha = 1; }
+  if (t > .02) { cctx.globalAlpha = t; cctx.drawImage(CAVE.bmp[b], x, y, w1 * z, h1 * z); cctx.globalAlpha = 1; }
 }
 const ovalPts = Array.from({ length: 56 }, (_, i) => { const th = i / 56 * Math.PI * 2; return [Math.cos(th) * RX * 1.012, Math.sin(th) * RY * 1.012]; });
 const pv = new THREE.Vector3();
@@ -720,7 +736,7 @@ function ovalClip(k) {   // k: how far the iris has opened inside the cut (0..1)
   cardG.updateMatrixWorld(true);
   return 'polygon(' + ovalPts.map(([x, y]) => { const [sx, sy] = toScreen(cc.localToWorld(pv.set(OX + x * k, OY + y * k, 0))); return `${sx.toFixed(1)}px ${sy.toFixed(1)}px`; }).join(',') + ')';
 }
-let caveMx = 0, caveMy = 0;
+let caveMx = 0, caveMy = 0, lastCave = '', lastClip = '', last3D = '', perfT = 0, perfN = 0;
 
 /* ---------- frame ---------- */
 let clock = 0, last = performance.now(), LP = [0, Math.PI, 0, 1];
@@ -862,7 +878,8 @@ function loop(now) {
   }
 
   /* ---- cave ---- */
-  if (u > T.holdC[0] && CAVE.next < CAVE_N) caveLoad();
+  if (u > T.holdB[0] && CAVE.busy < 4) caveLoad();
+  if (u > T.fold[0] && u < T.unfold2[1]) caveDecode(0);   // have the first frames decoded before the iris opens
   const caveOp = u >= T.unfold2[1] - .1 ? 1 : 0, iris = eo(inv(T.unfold2[1] - .1, T.hold2[0] + .3, u));
   if (caveOp > 0) {
     const dv = inv(...T.dive, u), e = sst(0, 1, dv);
@@ -872,12 +889,21 @@ function loop(now) {
     caveMy += (((COARSE ? 0 : (.5 - py)) * 14 * inCave) - caveMy) * Math.min(1, dt * 3);
     let fx = innerWidth / 2, fy = innerHeight / 2;
     if (cardG.visible) { cardG.updateMatrixWorld(true); [fx, fy] = toScreen(cc.localToWorld(pv.set(OX, OY, 0))); }
-    drawCave(fr, lerp(.5, 1, e), lerp(fx, innerWidth / 2, e), lerp(fy, innerHeight / 2, e), caveMx, caveMy);
-    caveCv.style.clipPath = cardG.visible ? ovalClip(Math.max(.002, iris)) : 'none';
+    const zk = lerp(.5, 1, e), ck = [fr.toFixed(2), zk.toFixed(4), fx | 0, fy | 0, caveMx.toFixed(1), caveMy.toFixed(1), innerWidth, innerHeight].join();
+    if (ck !== lastCave || caveDirty) { lastCave = ck; caveDirty = false; drawCave(fr, zk, lerp(fx, innerWidth / 2, e), lerp(fy, innerHeight / 2, e), caveMx, caveMy); }
+    else caveDecode(clamp(Math.floor(fr), 0, CAVE_N - 1));
+    const clipS = cardG.visible ? ovalClip(Math.max(.002, iris)) : 'none';
+    if (clipS !== lastClip) { lastClip = clipS; caveCv.style.clipPath = clipS; }
     caveCv.style.opacity = caveOp;
   } else if (caveCv.style.opacity !== '0') caveCv.style.opacity = 0;
 
-  renderer.render(scene, camera);
+  const inCave = u >= T.dive[1];
+  const key = [inCave ? 'cave' : u.toFixed(4), yaw.toFixed(4), pitch.toFixed(4), curBg, innerWidth, innerHeight].join();
+  const animated = pts.visible || u < T.burst[1];
+  if (animated || key !== last3D) { last3D = key; renderer.render(scene, camera); }
+  // adaptive resolution: if frames are slow, render the 3D a bit softer
+  perfT += dt; perfN++;
+  if (perfN >= 90) { const ms = perfT / perfN * 1000; perfT = perfN = 0; if (ms > 24 && DPR > 1) { DPR = Math.max(1, DPR - .25); renderer.setPixelRatio(DPR); sizes(); last3D = ''; } }
 }
 
 /* test hook: jump to a story position (in viewport heights after the strips) */
