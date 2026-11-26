@@ -806,9 +806,9 @@ const spaceEl = $('space'), fogCv = $('fog'), fctx = fogCv.getContext('2d');
 const SPACE = [
   { k: 'name', a: T.dive[1] - .45, b: fr2u(158) },
   { k: 'fields', a: fr2u(150), b: fr2u(318) },
-  { k: 'look', a: fr2u(312), b: fr2u(440) },
+  { k: 'look', a: fr2u(312), b: fr2u(440), o: [.76, .9] },
   { k: 'contact', a: fr2u(440), b: fr2u(493), stay: true }
-].map(g => ({ ...g, el: spaceEl.querySelector(`[data-k="${g.k}"]`), pts: null, last: '' }));
+].map(g => { const el = spaceEl.querySelector(`[data-k="${g.k}"]`); return { ...g, el, box: el.dataset.box.split(',').map(Number), pts: null, last: '' }; });
 const PUFF = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   r.addColorStop(0, 'rgba(236,230,255,1)'); r.addColorStop(.35, 'rgba(214,204,240,.45)'); r.addColorStop(1, 'rgba(200,190,235,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return c; })();
 let fogW = 0, fogH = 0, fogD = 1, fogDirty = true;
@@ -817,19 +817,30 @@ function fogSize() {
   const W = Math.round(innerWidth * fogD), H = Math.round(innerHeight * fogD);
   if (W !== fogW || H !== fogH) { fogW = fogCv.width = W; fogH = fogCv.height = H; for (const g of SPACE) g.pts = null; }
 }
-/* sample the letter shapes of a block's headline where it sits on screen */
+/* each block is the designer's 2560x1440 artboard: kept as laid out on landscape screens, its content centred and enlarged on portrait */
+function layoutSpace() {
+  const vw = innerWidth, vh = innerHeight;
+  for (const g of SPACE) {
+    const [x0, y0, x1, y1] = g.box, W = x1 - x0, H = y1 - y0;
+    let s, tx, ty;
+    if (vw >= vh * 1.1) { s = Math.min(vw / 2560, vh / 1440); tx = vw / 2 - 1280 * s; ty = vh / 2 - 720 * s; }
+    else { s = Math.min(vw * .88 / W, vh * .62 / H); tx = vw / 2 - (x0 + W / 2) * s; ty = vh * .47 - (y0 + H / 2) * s; }
+    g.el.style.transform = `translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px) scale(${s.toFixed(4)})`;
+    g.pts = null;
+  }
+}
+/* sample the drawn letters where they sit on screen, so the fog gathers onto the real shapes */
 function samplePts(g) {
-  const h = g.el.querySelector('.mk'), cs = getComputedStyle(h), r = h.getBoundingClientRect();
-  const lines = h.innerHTML.replace(/<svg[\s\S]*?<\/svg>/g, '').split(/<br\s*\/?>/i).map(t => t.replace(/<[^>]+>/g, '').trim());
-  const fs = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight) || fs * 1.05;
-  const c = document.createElement('canvas'), W = Math.ceil(innerWidth), H = Math.ceil(innerHeight); c.width = W; c.height = H;
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'alphabetic'; x.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
-  // place each line on the same baseline the browser uses (half-leading model), so the fog lands on the real letters
-  const fm = x.measureText(lines[0] || 'x'), fA = fm.fontBoundingBoxAscent ?? fs * .8, fD = fm.fontBoundingBoxDescent ?? fs * .2;
-  const top = r.top + (r.height - lh * lines.length) / 2;
-  lines.forEach((t, i) => x.fillText(t, r.left + r.width / 2, top + lh * i + (lh - (fA + fD)) / 2 + fA));
-  const d = x.getImageData(0, 0, W, H).data, cand = [], st = Math.max(2, Math.round(fs / 26));
+  const ims = [...g.el.querySelectorAll('img.fx')];
+  if (!ims.every(i => i.complete && i.naturalWidth)) return null;
+  const W = Math.ceil(innerWidth), H = Math.ceil(innerHeight), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  let hMin = 1e9;
+  for (const im of ims) { const r = im.getBoundingClientRect(); x.drawImage(im, r.left, r.top, r.width, r.height); hMin = Math.min(hMin, r.height); }
+  const st = Math.max(2, Math.round(Math.min(hMin, 120) / 30));
+  const d = x.getImageData(0, 0, W, H).data, cand = [];
   for (let yy = 0; yy < H; yy += st) for (let xx = 0; xx < W; xx += st) if (d[(yy * W + xx) * 4 + 3] > 140) cand.push(xx, yy);
+  if (!cand.length) return null;
   const n = Math.min(cand.length / 2, COARSE ? 260 : 560), out = [];
   let sd = g.k.length * 131 + 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
   const cx = innerWidth / 2, cy = innerHeight / 2;
@@ -839,6 +850,15 @@ function samplePts(g) {
     out.push({ tx, ty, sx: cx + Math.cos(ang) * rad, sy: cy + Math.sin(ang) * rad * .45 + innerHeight * .12, ph: rnd() * 6.28, sp: .5 + rnd(), big: 50 + rnd() * 90, sm: 10 + rnd() * 14, ord: rnd() });
   }
   return out;
+}
+/* "Graphic · Typography · UX UI": Graphic and UX UI surface first, Typography arrives between them, then the three settle into one line */
+function fieldWords(g, q) {
+  if (!g.words) g.words = [...g.el.querySelectorAll('img.w')].map((el, i) => ({ el, dy: i === 0 || i === 4 ? -222 : -145, a: i === 0 || i === 4 ? .4 : .5, last: '' }));
+  const fall = eio(inv(.58, .7, q));
+  for (const w of g.words) {
+    const o = sst(w.a, w.a + .07, q), y = w.dy * (1 - fall), k = o.toFixed(3) + '|' + y.toFixed(1);
+    if (k === w.last) continue; w.last = k; w.el.style.opacity = o; w.el.style.transform = `translateY(${y.toFixed(1)}px)`;
+  }
 }
 function space() {
   const live = storyOn && u > SPACE[0].a - .05;
@@ -853,11 +873,12 @@ function space() {
     if (!act) { if (g.last !== 'off') { g.last = 'off'; g.el.style.opacity = 0; g.el.style.filter = ''; } continue; }
     const q = clamp(p);
     // the type itself: surfaces out of the gathered fog, blurs away again
-    const ty = sst(.3, .5, q) * (g.stay ? 1 : 1 - sst(.64, .8, q)), bl = (1 - ty) * 16;
+    const oo = g.o || [.64, .8], ty = sst(.3, .5, q) * (g.stay ? 1 : 1 - sst(oo[0], oo[1], q)), bl = (1 - ty) * 16;
     const lv = ty.toFixed(3); if (lv !== g.last) { g.last = lv; g.el.style.opacity = ty; g.el.style.filter = !COARSE && bl > .6 ? `blur(${Math.min(10, bl).toFixed(1)}px)` : ''; }
-    if (!g.pts && document.fonts.check(`40px ${getComputedStyle(g.el.querySelector('.mk')).fontFamily}`)) g.pts = samplePts(g);
+    if (g.k === 'look') fieldWords(g, q);
+    if (!g.pts) g.pts = samplePts(g);
     if (!g.pts) continue;
-    const fadeIn = sst(0, .14, q), out = g.stay ? 0 : inv(.62, 1, q);
+    const fadeIn = sst(0, .14, q), out = g.stay ? 0 : inv((g.o || [.64])[0] - .02, 1, q);
     for (const pt of g.pts) {
       const gi = eio(clamp((inv(0, .42, q) * 1.3 - pt.ord * .3))), d = out * out * (.6 + pt.ord * .8);
       const dr = (1 - gi) * 28 + 2.5, ox = Math.sin(t * .35 * pt.sp + pt.ph) * dr, oy = Math.cos(t * .28 * pt.sp + pt.ph * 1.3) * dr * .6;
@@ -871,7 +892,7 @@ function space() {
   }
   fctx.globalAlpha = 1; fctx.globalCompositeOperation = 'source-over';
 }
-addEventListener('resize', () => { for (const g of SPACE) g.pts = null; });
+addEventListener('resize', layoutSpace); layoutSpace();
 
 /* ---------- frame ---------- */
 let clock = 0, last = performance.now(), LP = [0, Math.PI, 0, 1];
@@ -1048,3 +1069,5 @@ function loop(now) {
 /* test hook: jump to a story position (in viewport heights after the strips) */
 window.__go = v => { const y = E + v * innerHeight; lenis.scrollTo(y, { immediate: true, force: true }); };
 window.__T = T;
+window.__caveReady = i => !!CAVE.bmp[i];
+window.__roseXY = () => roseCells.map(r => [(r.x / vw + .5) * innerWidth, (-r.y / vh + .5) * innerHeight]);
