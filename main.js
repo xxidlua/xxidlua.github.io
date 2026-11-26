@@ -117,7 +117,8 @@ async function enter(){phase='typing';caret.classList.remove('blink');await init
     await wait(ch===' '?150+Math.random()*90:(i===18?380:60+Math.random()*95))}
   if(skipType){play('bell',{vol:.45});caret.classList.add('blink');lightsOn();return}
   await wait(260);play('bell',{vol:.55});caret.classList.add('blink');phase='await-lights'}
-function lightsOn(){phase='lights';play('spot',{vol:.9});
+// never light an empty stage: wait until the curtain mesh and its first simulated frame exist
+function lightsOn(){if(!(meshes.length&&cfr.length)){phase='lights-wait';setTimeout(lightsOn,80);return}phase='lights';play('spot',{vol:.9});
   for(const [t,v] of [[430,1],[500,.06],[590,.85],[650,.3],[760,1]])setTimeout(()=>{L.spot=v;L.amb=v*.5;dark.style.opacity=v>.5?0:1-v*.6;if(v>.5)$('.type').classList.add('gone')},t);
   setTimeout(()=>fade(proj,.08,2),800);setTimeout(()=>{phase='await-open'},800)}
 // two beds: Satie for the exhibition, a dream lullaby for the cave — story.js crossfades them with __mix(x)
