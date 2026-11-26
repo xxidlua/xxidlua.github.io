@@ -102,6 +102,11 @@ body.lit{cursor:auto}
 }
 /* ---- words in the cave: fog gathers into each line, the type surfaces from it ---- */
 @font-face{font-family:"Makcasa";src:url(makcasa.woff2) format("woff2");font-display:swap}
+#mist{position:fixed;left:0;right:0;bottom:0;height:62vh;z-index:4;pointer-events:none;opacity:0;overflow:hidden}
+#mist i{position:absolute;left:0;bottom:-6vh;width:200vw;height:100%;background:var(--fog) repeat-x 0 100%/100vw 100%;will-change:transform;animation:mist 90s linear infinite}
+#mist i+i{bottom:-14vh;height:80%;opacity:.7;animation-duration:140s;animation-direction:reverse}
+@keyframes mist{to{transform:translate3d(-100vw,0,0)}}
+@media (prefers-reduced-motion:reduce){#mist i{animation:none}}
 #fog{position:fixed;inset:0;width:100%;height:100%;z-index:23;pointer-events:none}
 #space{position:fixed;inset:0;z-index:24;pointer-events:none;color:#f4efe6;visibility:hidden}
 #space.on{visibility:visible}
@@ -169,6 +174,7 @@ body.lit{cursor:auto}
 <audio id="bgm" src="music.mp3" loop preload="none"></audio>
 <audio id="dream" src="dream.mp3" loop preload="none"></audio>
 <canvas id="cave" aria-hidden="true"></canvas>
+<div id="mist" aria-hidden="true"><i></i><i></i></div>
 <canvas id="fog" aria-hidden="true"></canvas>
 <div id="space" class="notranslate" translate="no">
   <div class="sp" data-k="name"><h2 class="mk">Seo Yejun</h2><p class="sub">XXIDLUA</p></div>
