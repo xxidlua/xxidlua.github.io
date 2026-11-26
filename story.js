@@ -742,54 +742,75 @@ function ovalClip(k) {   // k: how far the iris has opened inside the cut (0..1)
 let caveMx = 0, caveMy = 0, lastCave = '', lastClip = '', last3D = '', perfT = 0, perfN = 0;
 
 
-/* ---------- words in the cave: each line hangs at its own depth; scrolling flies you toward, into and past them ---------- */
-const spaceEl = $('space');
+/* ---------- words in the cave: drifting fog gathers into the letters, the type surfaces out of it, then it breaks up again ---------- */
+const spaceEl = $('space'), fogCv = $('fog'), fctx = fogCv.getContext('2d');
 const SPACE = [
-  { k: 'name', a: T.dive[1] - .55, b: fr2u(160) },
-  { k: 'fields', a: fr2u(120), b: fr2u(310), fly: true },
-  { k: 'look', a: fr2u(318), b: fr2u(440) },
-  { k: 'contact', a: fr2u(442), b: fr2u(493), stay: true }
-].map(g => {
-  const el = spaceEl.querySelector(`[data-k="${g.k}"]`);
-  const words = [...el.querySelectorAll('.w')].map(w => ({ el: w, d: +(w.dataset.d || 0), x: +(w.dataset.x || 0), z: +(w.dataset.z || 0), last: '' }));
-  const ticks = [...el.querySelectorAll('.tick')];
-  return { ...g, el, words, ticks };
-});
-const ei = t => t * t * t;
-function wordOp(z) { return sst(-1600, -950, z) * (1 - sst(320, 820, z)); }
-let spaceKey = '';
+  { k: 'name', a: T.dive[1] - .45, b: fr2u(158) },
+  { k: 'fields', a: fr2u(150), b: fr2u(318) },
+  { k: 'look', a: fr2u(312), b: fr2u(440) },
+  { k: 'contact', a: fr2u(440), b: fr2u(493), stay: true }
+].map(g => ({ ...g, el: spaceEl.querySelector(`[data-k="${g.k}"]`), pts: null, last: '' }));
+const PUFF = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(236,230,255,1)'); r.addColorStop(.35, 'rgba(214,204,240,.45)'); r.addColorStop(1, 'rgba(200,190,235,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return c; })();
+let fogW = 0, fogH = 0, fogD = 1, fogDirty = true;
+function fogSize() {
+  fogD = Math.min(devicePixelRatio, COARSE ? 1.5 : 1.25);
+  const W = Math.round(innerWidth * fogD), H = Math.round(innerHeight * fogD);
+  if (W !== fogW || H !== fogH) { fogW = fogCv.width = W; fogH = fogCv.height = H; for (const g of SPACE) g.pts = null; }
+}
+/* sample the letter shapes of a block's headline where it sits on screen */
+function samplePts(g) {
+  const h = g.el.querySelector('.mk'), cs = getComputedStyle(h), r = h.getBoundingClientRect();
+  const lines = h.innerHTML.split(/<br\s*\/?>/i).map(t => t.replace(/<[^>]+>/g, '').trim());
+  const fs = parseFloat(cs.fontSize), lh = parseFloat(cs.lineHeight) || fs * 1.05;
+  const c = document.createElement('canvas'), W = Math.ceil(innerWidth), H = Math.ceil(innerHeight); c.width = W; c.height = H;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `400 ${fs}px Makcasa, serif`;
+  const top = r.top + (r.height - lh * lines.length) / 2;
+  lines.forEach((t, i) => x.fillText(t, r.left + r.width / 2, top + lh * (i + .5)));
+  const d = x.getImageData(0, 0, W, H).data, cand = [], st = Math.max(2, Math.round(fs / 26));
+  for (let yy = 0; yy < H; yy += st) for (let xx = 0; xx < W; xx += st) if (d[(yy * W + xx) * 4 + 3] > 140) cand.push(xx, yy);
+  const n = Math.min(cand.length / 2, COARSE ? 650 : 1300), out = [];
+  let sd = g.k.length * 131 + 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const cx = innerWidth / 2, cy = innerHeight / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (rnd() * cand.length / 2 | 0) * 2, tx = cand[j], ty = cand[j + 1];
+    const ang = rnd() * Math.PI * 2, rad = (.35 + rnd() * .75) * Math.max(innerWidth, innerHeight) * .5;
+    out.push({ tx, ty, sx: cx + Math.cos(ang) * rad, sy: cy + Math.sin(ang) * rad * .45 + innerHeight * .12, ph: rnd() * 6.28, sp: .5 + rnd(), big: 40 + rnd() * 80, sm: 7 + rnd() * 12, ord: rnd() });
+  }
+  return out;
+}
 function space() {
   const live = storyOn && u > SPACE[0].a - .05;
   spaceEl.classList.toggle('on', live);
-  if (!live) return;
-  const key = u.toFixed(4) + caveMx.toFixed(1) + caveMy.toFixed(1);
-  if (key === spaceKey) return; spaceKey = key;
-  spaceEl.style.perspectiveOrigin = `${50 + caveMx * .12}% ${50 + caveMy * .12}%`;
+  if (!live) { if (fogDirty) { fctx.clearRect(0, 0, fogW, fogH); fogDirty = false; } return; }
+  fogSize();
+  fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fogW, fogH); fogDirty = true;
+  fctx.setTransform(fogD, 0, 0, fogD, 0, 0); fctx.globalCompositeOperation = 'lighter';
+  const t = clock;
   for (const g of SPACE) {
-    const p = (u - g.a) / (g.b - g.a), act = p > -.02 && (g.stay || p < 1.02);
-    if (!act) { for (const w of g.words) if (w.last !== 'off') { w.last = 'off'; w.el.style.opacity = 0; } continue; }
+    const p = (u - g.a) / (g.b - g.a), act = p > -.01 && (g.stay || p < 1.01);
+    if (!act) { if (g.last !== 'off') { g.last = 'off'; g.el.style.opacity = 0; g.el.style.filter = ''; } continue; }
     const q = clamp(p);
-    if (g.fly) {   // three words on a depth grid: you pass them one by one
-      const travel = -1300 + q * 3700;
-      for (const w of g.words) {
-        const z = w.z + travel, o = wordOp(z) * sst(0, .05, q) * (1 - sst(.95, 1, q));
-        const t = `translate3d(0,0,${z.toFixed(1)}px)`, v = t + o.toFixed(3);
-        if (v !== w.last) { w.last = v; w.el.style.transform = t; w.el.style.opacity = o; }
-      }
-      continue;
+    // the type itself: surfaces out of the gathered fog, blurs away again
+    const ty = sst(.3, .5, q) * (g.stay ? 1 : 1 - sst(.64, .8, q)), bl = (1 - ty) * 16;
+    const lv = ty.toFixed(3); if (lv !== g.last) { g.last = lv; g.el.style.opacity = ty; g.el.style.filter = bl > .3 ? `blur(${bl.toFixed(1)}px)` : ''; }
+    if (!g.pts && document.fonts.check('40px Makcasa')) g.pts = samplePts(g);
+    if (!g.pts) continue;
+    const fadeIn = sst(0, .14, q), out = g.stay ? 0 : inv(.62, 1, q);
+    for (const pt of g.pts) {
+      const gi = eio(clamp((inv(0, .42, q) * 1.3 - pt.ord * .3))), d = out * out * (.6 + pt.ord * .8);
+      const dr = (1 - gi) * 28 + 2.5, ox = Math.sin(t * .35 * pt.sp + pt.ph) * dr, oy = Math.cos(t * .28 * pt.sp + pt.ph * 1.3) * dr * .6;
+      let x = lerp(pt.sx, pt.tx, gi) + ox, y = lerp(pt.sy, pt.ty, gi) + oy;
+      x += (pt.tx - innerWidth / 2) * d * .5 + Math.sin(pt.ph * 3) * d * 160; y += -d * 150 + Math.cos(pt.ph * 2) * d * 60;
+      const r = lerp(pt.big, pt.sm, gi) + d * pt.big * .9;
+      const a = fadeIn * (lerp(.045, .13, gi) * (1 - ty * .5)) * (1 - out);
+      if (a < .004) continue;
+      fctx.globalAlpha = a; fctx.drawImage(PUFF, x - r, y - r, r * 2, r * 2);
     }
-    // a block: words come in scattered in depth, settle into one line, then scatter again as you pass through
-    const zin = lerp(-1700, 0, eo(inv(0, .4, q))), hold = inv(.4, .66, q) * 70, zout = g.stay ? 0 : ei(inv(.66, 1, q)) * 1100;
-    const Z = zin + hold + zout, spread = (1 - eo(inv(0, .42, q))) + (g.stay ? 0 : ei(inv(.66, 1, q)) * .8);
-    for (const w of g.words) {
-      const z = Z + w.d * spread, x = w.x * spread * 3, o = wordOp(z);
-      const t = `translate3d(${x.toFixed(1)}px,0,${z.toFixed(1)}px)`, v = t + o.toFixed(3);
-      if (v !== w.last) { w.last = v; w.el.style.transform = t; w.el.style.opacity = o; }
-    }
-    const to = wordOp(Z) * sst(.3, .45, q) * (g.stay ? 1 : 1 - sst(.62, .72, q));   // registration ticks frame the block while it's in focus
-    for (const tk of g.ticks) { tk.style.opacity = to; tk.style.transform = `translateZ(${Z.toFixed(1)}px) scale(${(1 + (1 - sst(.3, .45, q)) * .6).toFixed(3)})`; }
   }
+  fctx.globalAlpha = 1; fctx.globalCompositeOperation = 'source-over';
 }
+addEventListener('resize', () => { for (const g of SPACE) g.pts = null; });
 
 /* ---------- frame ---------- */
 let clock = 0, last = performance.now(), LP = [0, Math.PI, 0, 1];
