@@ -645,8 +645,7 @@ function bloom(tm) {
 const CAPS = [
   ['shred', .06, .78], ['leaflet', T.holdF[0] + .02, T.top[0] - .02], ['dreamer', T.holdS[0] - .12, T.dissS[0] + .04],
   ['roses', T.gatherR[1] - .08, T.scatR[0] + .02], ['exhibit', T.holdB[0] - .06, T.pull[0] + .12],
-  ['card', T.holdC[0] - .06, T.fold[0] + .04],
-  ['name', fr2u(14), fr2u(128)], ['fields', fr2u(168), fr2u(292)], ['look', fr2u(330), fr2u(424)], ['contact', fr2u(452), 99]
+  ['card', T.holdC[0] - .06, T.fold[0] + .04]
 ];
 const capEls = {}, capOn = {}, capT = {};
 document.querySelectorAll('.cap').forEach(el => { (capEls[el.dataset.k] ||= []).push(el); });
@@ -691,9 +690,11 @@ function captions() {
 const caveCv = $('cave'), cctx = caveCv.getContext('2d');
 const CAVE_BG = '#0b0a10';
 const OX = (.4924 - .5) * CW, OY = CC + .499 * CH / 2, RX = .3477 * CW, RY = .352 * CH / 2;   // the laser-cut oval, card-local
+function caveSetName() { return innerWidth / innerHeight < 1 ? 'm' : innerWidth * devicePixelRatio >= 2200 ? 'hd' : 'd'; }
+const CAVE_WIN = { hd: [5, 12], d: [8, 18], m: [8, 20] };   // decoded frames kept behind / ahead of the playhead
 const CAVE = { set: null, blobs: [], req: [], bmp: [], live: new Set(), dec: 0, busy: 0, cur: 0 };
 function caveLoad() {   // compressed frames, fetched at low priority, nearest-ahead first
-  const set = innerWidth / innerHeight < 1 ? 'm' : 'd';
+  const set = caveSetName();
   if (CAVE.set !== set) { for (const k of CAVE.live) CAVE.bmp[k].close(); CAVE.live.clear(); Object.assign(CAVE, { set, blobs: [], req: [], bmp: [] }); }
   while (CAVE.busy < 4) {
     let i = -1;
@@ -708,8 +709,9 @@ function caveLoad() {   // compressed frames, fetched at low priority, nearest-a
 }
 function caveDecode(c) {  // keep only a small window of decoded frames around the playhead (decoded off the main thread)
   CAVE.cur = c;
-  for (const k of CAVE.live) if (k < c - 12 || k > c + 26) { CAVE.bmp[k].close(); CAVE.bmp[k] = null; CAVE.live.delete(k); }
-  for (let k = Math.max(0, c - 3); k <= Math.min(CAVE_N - 1, c + 16) && CAVE.dec < 3; k++) {
+  const [wb, wa] = CAVE_WIN[CAVE.set] || [8, 18];
+  for (const k of CAVE.live) if (k < c - wb || k > c + wa) { CAVE.bmp[k].close(); CAVE.bmp[k] = null; CAVE.live.delete(k); }
+  for (let k = Math.max(0, c - 2); k <= Math.min(CAVE_N - 1, c + wa - 3) && CAVE.dec < 3; k++) {
     if (CAVE.bmp[k] || CAVE.bmp[k] === 0 || !CAVE.blobs[k]) continue;
     CAVE.bmp[k] = 0; CAVE.dec++; const set = CAVE.set;
     createImageBitmap(CAVE.blobs[k]).then(bm => { if (CAVE.set !== set) { bm.close(); return; } CAVE.bmp[k] = bm; CAVE.live.add(k); caveDirty = true; })
@@ -720,7 +722,7 @@ let caveDirty = true;
 function caveNear(i) { for (let d = 0; d < 40; d++) { if (CAVE.bmp[i - d]) return i - d; if (CAVE.bmp[i + d]) return i + d; } return -1; }
 /* f: fractional frame · z: zoom about the focal point (fx, fy in css px) · mx, my: parallax in css px */
 function drawCave(f, z, fx, fy, mx, my) {
-  const d = Math.min(devicePixelRatio, 1.5), W = Math.round(innerWidth * d), H = Math.round(innerHeight * d);
+  const d = Math.min(devicePixelRatio, CAVE.set === 'hd' ? 2 : 1.5), W = Math.round(innerWidth * d), H = Math.round(innerHeight * d);
   if (caveCv.width !== W || caveCv.height !== H) { caveCv.width = W; caveCv.height = H; }
   const i0 = clamp(Math.floor(f), 0, CAVE_N - 1); caveDecode(i0); const a = caveNear(i0); if (a < 0) return;
   const b = a === i0 && CAVE.bmp[i0 + 1] ? i0 + 1 : -1, t = b > 0 ? f - i0 : 0;
@@ -738,6 +740,56 @@ function ovalClip(k) {   // k: how far the iris has opened inside the cut (0..1)
 }
 let caveMx = 0, caveMy = 0, lastCave = '', lastClip = '', last3D = '', perfT = 0, perfN = 0;
 
+
+/* ---------- words in the cave: each line hangs at its own depth; scrolling flies you toward, into and past them ---------- */
+const spaceEl = $('space');
+const SPACE = [
+  { k: 'name', a: T.dive[1] - .55, b: fr2u(160) },
+  { k: 'fields', a: fr2u(120), b: fr2u(310), fly: true },
+  { k: 'look', a: fr2u(318), b: fr2u(440) },
+  { k: 'contact', a: fr2u(442), b: fr2u(493), stay: true }
+].map(g => {
+  const el = spaceEl.querySelector(`[data-k="${g.k}"]`);
+  const words = [...el.querySelectorAll('.w')].map(w => ({ el: w, d: +(w.dataset.d || 0), x: +(w.dataset.x || 0), z: +(w.dataset.z || 0), last: '' }));
+  const ticks = [...el.querySelectorAll('.tick')];
+  return { ...g, el, words, ticks };
+});
+const ei = t => t * t * t;
+function wordOp(z) { return sst(-1600, -950, z) * (1 - sst(320, 820, z)); }
+let spaceKey = '';
+function space() {
+  const live = storyOn && u > SPACE[0].a - .05;
+  spaceEl.classList.toggle('on', live);
+  if (!live) return;
+  const key = u.toFixed(4) + caveMx.toFixed(1) + caveMy.toFixed(1);
+  if (key === spaceKey) return; spaceKey = key;
+  spaceEl.style.perspectiveOrigin = `${50 + caveMx * .12}% ${50 + caveMy * .12}%`;
+  for (const g of SPACE) {
+    const p = (u - g.a) / (g.b - g.a), act = p > -.02 && (g.stay || p < 1.02);
+    if (!act) { for (const w of g.words) if (w.last !== 'off') { w.last = 'off'; w.el.style.opacity = 0; } continue; }
+    const q = clamp(p);
+    if (g.fly) {   // three words on a depth grid: you pass them one by one
+      const travel = -1300 + q * 3700;
+      for (const w of g.words) {
+        const z = w.z + travel, o = wordOp(z) * sst(0, .05, q) * (1 - sst(.95, 1, q));
+        const t = `translate3d(0,0,${z.toFixed(1)}px)`, v = t + o.toFixed(3);
+        if (v !== w.last) { w.last = v; w.el.style.transform = t; w.el.style.opacity = o; }
+      }
+      continue;
+    }
+    // a block: words come in scattered in depth, settle into one line, then scatter again as you pass through
+    const zin = lerp(-1700, 0, eo(inv(0, .4, q))), hold = inv(.4, .66, q) * 70, zout = g.stay ? 0 : ei(inv(.66, 1, q)) * 1100;
+    const Z = zin + hold + zout, spread = (1 - eo(inv(0, .42, q))) + (g.stay ? 0 : ei(inv(.66, 1, q)) * .8);
+    for (const w of g.words) {
+      const z = Z + w.d * spread, x = w.x * spread * 3, o = wordOp(z);
+      const t = `translate3d(${x.toFixed(1)}px,0,${z.toFixed(1)}px)`, v = t + o.toFixed(3);
+      if (v !== w.last) { w.last = v; w.el.style.transform = t; w.el.style.opacity = o; }
+    }
+    const to = wordOp(Z) * sst(.3, .45, q) * (g.stay ? 1 : 1 - sst(.62, .72, q));   // registration ticks frame the block while it's in focus
+    for (const tk of g.ticks) { tk.style.opacity = to; tk.style.transform = `translateZ(${Z.toFixed(1)}px) scale(${(1 + (1 - sst(.3, .45, q)) * .6).toFixed(3)})`; }
+  }
+}
+
 /* ---------- frame ---------- */
 let clock = 0, last = performance.now(), LP = [0, Math.PI, 0, 1];
 const tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(), qF = new THREE.Quaternion(), eul = new THREE.Euler();
@@ -751,7 +803,8 @@ function loop(now) {
   const sy = lenis.animatedScroll ?? scrollY;
   uPrev = u; u = (sy - E) / innerHeight;
   const b = updateStage(sy);
-  captions();
+  captions(); space();
+  if (storyOn && window.__mix) window.__mix(sst(T.dive[0], T.cave[0] + .4, u));   // Satie fades into the dream lullaby as you enter the oval
   if (storyOn) for (const [th, k, v] of CUES) if ((uPrev < th) !== (u < th) && Math.abs(u - uPrev) < .6) sfx(k, v);
 
   const yt = COARSE ? dragYaw : (px - .5) * Math.PI * 2, pt = COARSE ? 0 : (py - .5) * .7;

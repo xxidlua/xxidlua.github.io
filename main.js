@@ -110,21 +110,27 @@ requestAnimationFrame(frame);
 
 /* ---------- sequence ---------- */
 const LINE='Thank you for coming to my exhibition';let phase='gate',proj=null;window.__phase=()=>phase;
-const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));let skipType=false;
 async function enter(){phase='typing';caret.classList.remove('blink');await initAudio();proj=play('proj',{vol:0,loop:true});fade(proj,.18,1.2);
-  await wait(700);for(let i=0;i<LINE.length;i++){const ch=LINE[i];typed.textContent+=ch;
+  await wait(700);for(let i=0;i<LINE.length;i++){if(skipType){typed.textContent=LINE;break}const ch=LINE[i];typed.textContent+=ch;
     play('k'+(Math.random()*10|0),ch===' '?{vol:.35,rate:.85}:{vol:.75,rate:.94+Math.random()*.12});
     await wait(ch===' '?150+Math.random()*90:(i===18?380:60+Math.random()*95))}
+  if(skipType){play('bell',{vol:.45});caret.classList.add('blink');lightsOn();return}
   await wait(260);play('bell',{vol:.55});caret.classList.add('blink');phase='await-lights'}
 function lightsOn(){phase='lights';play('spot',{vol:.9});
   for(const [t,v] of [[430,1],[500,.06],[590,.85],[650,.3],[760,1]])setTimeout(()=>{L.spot=v;L.amb=v*.5;dark.style.opacity=v>.5?0:1-v*.6;if(v>.5)$('.type').classList.add('gone')},t);
   setTimeout(()=>fade(proj,.08,2),800);setTimeout(()=>{phase='await-open'},800)}
-let bgm=null;function startMusic(){const a=$('#bgm');if(!a)return;try{if(AC){if(!bgm){const s=AC.createMediaElementSource(a),g=AC.createGain();g.gain.value=0;s.connect(g).connect(AC.destination);bgm={g}}
+// two beds: Satie for the exhibition, a dream lullaby for the cave — story.js crossfades them with __mix(x)
+let dreamG=null,mixX=0;
+window.__mix=x=>{if(!AC||!bgm||!dreamG)return;x=Math.max(0,Math.min(1,x));if(Math.abs(x-mixX)<.004)return;mixX=x;const t=AC.currentTime;
+  bgm.g.gain.setTargetAtTime(.32*Math.cos(x*Math.PI/2),t,.35);dreamG.gain.setTargetAtTime(.5*Math.sin(x*Math.PI/2),t,.35)};
+function startDream(){const d=$('#dream');if(!d||!AC||dreamG)return;try{const s=AC.createMediaElementSource(d);dreamG=AC.createGain();dreamG.gain.value=0;s.connect(dreamG).connect(AC.destination);d.play().catch(()=>{})}catch(e){}}
+let bgm=null;function startMusic(){const a=$('#bgm');if(!a)return;try{if(AC){startDream();if(!bgm){const s=AC.createMediaElementSource(a),g=AC.createGain();g.gain.value=0;s.connect(g).connect(AC.destination);bgm={g}}
   a.play().catch(()=>{});const g=bgm.g.gain;g.cancelScheduledValues(AC.currentTime);g.setValueAtTime(0,AC.currentTime);g.linearRampToValueAtTime(.32,AC.currentTime+7)}else{a.volume=.3;a.play().catch(()=>{})}}catch(e){}}
 function openCurtain(){if(cfr.length<2){setTimeout(openCurtain,80);return}phase='open';startMusic();stage.classList.add('open');opening=true;openT0=performance.now();play('curtain',{vol:.85});
   const t0=performance.now();(function hl(){const t=(performance.now()-t0)/1000;L.house=Math.min(1,.25+t*.6);L.foot=Math.min(1,t*.6);L.spot=Math.max(.0,1-t*.3);L.amb=.5+Math.min(.5,t*.3);if(t<2.6)requestAnimationFrame(hl)})();
   setTimeout(()=>{document.body.classList.add('lit');fade(proj,0,3)},1600)}
-function onAct(){if(phase==='main')return;if(phase==='gate')enter();else if(phase==='await-lights')lightsOn();else if(phase==='await-open')openCurtain()}
+function onAct(){if(phase==='main')return;if(phase==='typing'){skipType=true;return}if(phase==='gate')enter();else if(phase==='await-lights')lightsOn();else if(phase==='await-open')openCurtain()}
 let lastAct=0;const act=e=>{const t=performance.now();if(t-lastAct<450)return;lastAct=t;onAct()};addEventListener('pointerup',act);addEventListener('touchend',act,{passive:true});addEventListener('click',act);addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onAct()}});
 // test hooks
 window.__lights=o=>{Object.assign(L,o);applyLights();dark.style.opacity=0;$('.type').classList.add('gone')};
@@ -141,7 +147,9 @@ window.__shredStrips=strips;
 let sh0=0,shift=0;
 function startShred(){if(phase!=='main')return;phase='shred';document.body.classList.add('exit');hero.style.transition='none';play('shred',{vol:.85});window.__unlockSite&&window.__unlockSite();
   setTimeout(()=>{sh0=performance.now();requestAnimationFrame(shredFrame)},450)}
-function shredFrame(now){const t=(now-sh0)/1000,trav=V*t;
+// starts gently, then the shredder picks up speed
+const V0=240,ACC=150,T_END=(-V0+Math.sqrt(V0*V0+2*ACC*(DELAY+LEAF+40)))/ACC;
+function shredFrame(now){const t=(now-sh0)/1000,trav=V0*t+.5*ACC*t*t;
   // card slides down at a constant speed inside the glass
   cardEl.style.transform=`translateY(${(trav/470*100).toFixed(3)}%)`;
   const e=Math.max(0,Math.min(LEAF,trav-DELAY)),f=e/LEAF;window.__shredE=e;
@@ -152,7 +160,7 @@ function shredFrame(now){const t=(now-sh0)/1000,trav=V*t;
   // the frame stays put; it only trembles while the shredder runs
   const jit=(f>0&&f<1)?(Math.random()-.5)*.8:0;
   hero.style.translate=`${jit.toFixed(2)}px 0`;
-  if(t<(DELAY+LEAF+40)/V+.6)requestAnimationFrame(shredFrame);else{phase='leaflet';hero.style.translate='0 0'}}
+  if(t<T_END+.6)requestAnimationFrame(shredFrame);else{phase='leaflet';hero.style.translate='0 0'}}
 addEventListener('wheel',e=>{if(phase==='main'&&e.deltaY>6)startShred()},{passive:true});addEventListener('keydown',e=>{if(phase==='main'&&['ArrowDown','PageDown',' '].includes(e.key))startShred()});
 let ty0=null;addEventListener('touchstart',e=>{ty0=e.touches[0].clientY},{passive:true});
 addEventListener('touchmove',e=>{if(ty0!=null&&phase==='main'&&ty0-e.touches[0].clientY>24){ty0=null;startShred()}},{passive:true});
