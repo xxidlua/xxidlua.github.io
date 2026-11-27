@@ -841,14 +841,17 @@ function samplePts(g) {
   const d = x.getImageData(0, 0, W, H).data, cand = [];
   for (let yy = 0; yy < H; yy += st) for (let xx = 0; xx < W; xx += st) if (d[(yy * W + xx) * 4 + 3] > 140) cand.push(xx, yy);
   if (!cand.length) return null;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < cand.length; i += 2) { x0 = Math.min(x0, cand[i]); x1 = Math.max(x1, cand[i]); y0 = Math.min(y0, cand[i + 1]); y1 = Math.max(y1, cand[i + 1]); }
   const n = Math.min(cand.length / 2, COARSE ? 260 : 560), out = [];
   let sd = g.k.length * 131 + 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-  const cx = innerWidth / 2, cy = innerHeight / 2;
+  const cx = innerWidth / 2, cy = innerHeight / 2, sp0 = Math.min(x1 - x0, y1 - y0), bs = Math.min(1, sp0 / 110), ss = Math.min(1, Math.max(.35, sp0 / 160));
   for (let i = 0; i < n; i++) {
     const j = (rnd() * cand.length / 2 | 0) * 2, tx = cand[j], ty = cand[j + 1];
     const ang = rnd() * Math.PI * 2, rad = (.35 + rnd() * .75) * Math.max(innerWidth, innerHeight) * .5;
-    out.push({ tx, ty, sx: cx + Math.cos(ang) * rad, sy: cy + Math.sin(ang) * rad * .45 + innerHeight * .12, ph: rnd() * 6.28, sp: .5 + rnd(), big: 50 + rnd() * 90, sm: 10 + rnd() * 14, ord: rnd() });
+    out.push({ tx, ty, sx: cx + Math.cos(ang) * rad, sy: cy + Math.sin(ang) * rad * .45 + innerHeight * .12, ph: rnd() * 6.28, sp: .5 + rnd(), big: (50 + rnd() * 90) * bs, sm: (10 + rnd() * 14) * ss, ord: rnd() });
   }
+  out.area = Math.max(1, (x1 - x0) * (y1 - y0)); out.span = Math.min(x1 - x0, y1 - y0);
   return out;
 }
 /* "Graphic · Typography · UX UI": Graphic and UX UI surface first, Typography arrives between them, then the three settle into one line */
@@ -885,7 +888,8 @@ function space() {
       let x = lerp(pt.sx, pt.tx, gi) + ox, y = lerp(pt.sy, pt.ty, gi) + oy;
       x += (pt.tx - innerWidth / 2) * d * .5 + Math.sin(pt.ph * 3) * d * 160; y += -d * 150 + Math.cos(pt.ph * 2) * d * 60;
       const r = lerp(pt.big, pt.sm, gi) + d * pt.big * .9;
-      const a = fadeIn * (lerp(.045, .13, gi) * (1 - ty * .5)) * (1 - out);
+      const aEff = lerp(innerWidth * innerHeight * .45, g.pts.area + Math.PI * r * r, gi), cov = g.pts.length * Math.PI * r * r / aEff;
+      const a = fadeIn * (lerp(.045, .13, gi) * (1 - ty * .5)) * (1 - out) * Math.min(1, 3.2 / cov);
       if (a < .004) continue;
       fctx.globalAlpha = a; fctx.drawImage(PUFF, x - r, y - r, r * 2, r * 2);
     }
